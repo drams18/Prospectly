@@ -12,7 +12,7 @@ body {
 }
 
 .container {
-  max-width: 860px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 40px 16px;
 }
@@ -105,34 +105,53 @@ header p {
   color: #555;
 }
 
+/* Two-column layout */
+.results-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.results-list {
+  width: 360px;
+  flex-shrink: 0;
+  max-height: 800px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 /* Cards */
 .card {
   background: #fff;
   border-radius: 10px;
-  padding: 18px 20px;
-  margin-bottom: 10px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
   cursor: pointer;
-  transition: box-shadow 0.15s;
-  text-decoration: none;
-  color: inherit;
+  transition: box-shadow 0.15s, background 0.15s;
+  border: 2px solid transparent;
 }
 
 .card:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+.card.selected {
+  border-color: #111;
+  background: #fafafa;
+}
+
 .score-badge {
-  min-width: 52px;
-  height: 52px;
+  min-width: 48px;
+  height: 48px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -148,14 +167,14 @@ header p {
 
 .card-name {
   font-weight: 600;
-  font-size: 1rem;
-  margin-bottom: 4px;
+  font-size: 0.95rem;
+  margin-bottom: 3px;
 }
 
 .card-address {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #666;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -164,13 +183,33 @@ header p {
 .card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
 }
 
+/* Detail button */
+.detail-btn {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: #555;
+  flex-shrink: 0;
+  align-self: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.detail-btn:hover {
+  background: #f0f0f0;
+  border-color: #bbb;
+}
+
+/* Tags */
 .tag {
-  font-size: 0.75rem;
-  padding: 3px 8px;
+  font-size: 0.72rem;
+  padding: 2px 7px;
   border-radius: 20px;
   font-weight: 500;
 }
@@ -180,5 +219,107 @@ header p {
 .tag.has-site { background: #e2e3e5; color: #383d41; }
 .tag.rating   { background: #e8f4f8; color: #1a6080; }
 .tag.reviews  { background: #f0f0f0; color: #555; }
+
+/* Detail panel */
+.detail-panel {
+  flex: 1;
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  position: sticky;
+  top: 20px;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.score-badge.detail-score {
+  min-width: 56px;
+  height: 56px;
+  font-size: 1.2rem;
+}
+
+.detail-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.detail-score-label {
+  font-size: 0.78rem;
+  color: #888;
+  margin-top: 3px;
+}
+
+.detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #999;
+}
+
+.detail-value {
+  font-size: 0.92rem;
+  color: #222;
+  word-break: break-word;
+}
+
+.detail-value a {
+  color: #1a6080;
+  text-decoration: none;
+}
+
+.detail-value a:hover {
+  text-decoration: underline;
+}
+
+.not-found {
+  color: #aaa;
+  font-style: italic;
+  font-size: 0.88rem;
+}
+
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.detail-maps-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: #555;
+  text-decoration: none;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 7px 14px;
+  transition: background 0.12s;
+}
+
+.detail-maps-link:hover {
+  background: #f5f5f5;
+}
 
 .hidden { display: none !important; }

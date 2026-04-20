@@ -7,8 +7,11 @@ const toolbarEl     = document.getElementById('toolbar');
 const resultCountEl = document.getElementById('resultCount');
 const resultsEl     = document.getElementById('results');
 const downloadBtn   = document.getElementById('downloadBtn');
+const detailPanel   = document.getElementById('detailPanel');
 
-let currentResults = [];
+let currentResults   = [];
+let displayedResults = [];
+let selectedIndex    = null;
 
 // ─── Search ───────────────────────────────────────────────────────────────────
 
@@ -19,6 +22,9 @@ async function search() {
   setStatus('Recherche en cours…');
   searchBtn.disabled = true;
   resultsEl.innerHTML = '';
+  detailPanel.classList.add('hidden');
+  selectedIndex = null;
+  displayedResults = [];
   toolbarEl.classList.add('hidden');
 
   try {
@@ -48,11 +54,13 @@ function renderResults(data) {
     return;
   }
 
-  resultCountEl.textContent = `${data.length} prospect${data.length > 1 ? 's' : ''} trouvé${data.length > 1 ? 's' : ''}`;
+  displayedResults = data.slice(0, 30);
+
+  resultCountEl.textContent = `${displayedResults.length} prospect${displayedResults.length > 1 ? 's' : ''} trouvé${displayedResults.length > 1 ? 's' : ''}`;
   toolbarEl.classList.remove('hidden');
 
-  resultsEl.innerHTML = data.map((s) => `
-    <a class="card" href="${s.googleMapsUrl}" target="_blank" rel="noopener">
+  resultsEl.innerHTML = displayedResults.map((s, i) => `
+    <div class="card" data-index="${i}">
       <div class="score-badge ${scorePriority(s.score)}">${s.score}</div>
       <div class="card-body">
         <div class="card-name">${escape(s.name)}</div>
@@ -63,8 +71,78 @@ function renderResults(data) {
           ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
         </div>
       </div>
-    </a>
+      <button class="detail-btn" title="Voir le détail">👁</button>
+    </div>
   `).join('');
+
+  resultsEl.addEventListener('click', handleCardClick, { once: false });
+}
+
+function handleCardClick(e) {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const index = parseInt(card.dataset.index, 10);
+  selectProspect(index);
+}
+
+function selectProspect(index) {
+  selectedIndex = index;
+
+  resultsEl.querySelectorAll('.card').forEach((card) => {
+    card.classList.toggle('selected', parseInt(card.dataset.index, 10) === index);
+  });
+
+  renderDetail(displayedResults[index]);
+}
+
+function renderDetail(s) {
+  const phone   = s.phone   ?? null;
+  const website = s.website ?? null;
+
+  const notFound = '<span class="not-found">information non trouvée</span>';
+
+  detailPanel.classList.remove('hidden');
+  detailPanel.innerHTML = `
+    <div class="detail-header">
+      <div class="score-badge ${scorePriority(s.score)} detail-score">${s.score}</div>
+      <div class="detail-title-block">
+        <div class="detail-name">${escape(s.name)}</div>
+        <div class="detail-score-label">Score de prospection</div>
+      </div>
+    </div>
+
+    <div class="detail-fields">
+      <div class="detail-field">
+        <div class="detail-label">Nom</div>
+        <div class="detail-value">${escape(s.name) || notFound}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Adresse</div>
+        <div class="detail-value">${escape(s.address) || notFound}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Téléphone</div>
+        <div class="detail-value">${phone ? escape(phone) : notFound}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Site web</div>
+        <div class="detail-value">${website
+          ? `<a href="${escape(website)}" target="_blank" rel="noopener">${escape(website)}</a>`
+          : notFound
+        }</div>
+      </div>
+    </div>
+
+    <div class="detail-meta">
+      ${webTag(s)}
+      ${s.rating  ? `<span class="tag rating">★ ${s.rating}</span>`     : ''}
+      ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
+    </div>
+
+    <a class="detail-maps-link" href="${s.googleMapsUrl}" target="_blank" rel="noopener">
+      Voir sur Google Maps ↗
+    </a>
+  `;
 }
 
 function scorePriority(score) {
