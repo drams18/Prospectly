@@ -15,6 +15,8 @@ let selectedIndex    = null;
 let searchLat        = null;
 let searchLng        = null;
 let acDebounce       = null;
+let currentPage      = 1;
+const PAGE_SIZE      = 10;
 
 // ─── Search ───────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,8 @@ async function search() {
   detailPanel.classList.add('hidden');
   selectedIndex = null;
   displayedResults = [];
+  currentResults = [];
+  currentPage = 1;
   toolbarEl.classList.add('hidden');
 
   try {
@@ -45,8 +49,9 @@ async function search() {
 
     if (!res.ok) throw new Error(`Erreur serveur (${res.status})`);
 
-    currentResults = await res.json();
-    renderResults(currentResults);
+    const data = await res.json();
+    currentResults = Array.isArray(data) ? data : (data.results ?? []);
+    renderResults();
     clearStatus();
   } catch (err) {
     setStatus(`Erreur : ${err.message}`, true);
@@ -55,20 +60,26 @@ async function search() {
   }
 }
 
+function loadMore() {
+  currentPage += 1;
+  renderResults();
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────────
 
-function renderResults(data) {
-  if (!data.length) {
+function renderResults() {
+  if (!currentResults.length) {
     setStatus('Aucun résultat trouvé.');
     return;
   }
 
-  displayedResults = data.slice(0, 30);
+  displayedResults = currentResults.slice(0, currentPage * PAGE_SIZE);
+  const hasMore = displayedResults.length < currentResults.length;
 
-  resultCountEl.textContent = `${displayedResults.length} prospect${displayedResults.length > 1 ? 's' : ''} trouvé${displayedResults.length > 1 ? 's' : ''}`;
+  resultCountEl.textContent = `${currentResults.length} prospect${currentResults.length > 1 ? 's' : ''} trouvé${currentResults.length > 1 ? 's' : ''}`;
   toolbarEl.classList.remove('hidden');
 
-  resultsEl.innerHTML = displayedResults.map((s, i) => `
+  const cards = displayedResults.map((s, i) => `
     <div class="card" data-index="${i}">
       <div class="score-badge ${scorePriority(s.score)}">${s.score}</div>
       <div class="card-body">
@@ -84,6 +95,15 @@ function renderResults(data) {
       <button class="detail-btn" title="Voir le détail">👁</button>
     </div>
   `).join('');
+
+  const loadMoreHtml = hasMore
+    ? `<button id="loadMoreBtn" class="load-more-btn">Voir plus de résultats</button>`
+    : '';
+
+  resultsEl.innerHTML = cards + loadMoreHtml;
+
+  const loadMoreBtn = document.getElementById('loadMoreBtn');
+  if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMore);
 
   resultsEl.addEventListener('click', handleCardClick, { once: false });
 }

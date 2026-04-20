@@ -29,11 +29,16 @@ async function geocode(location) {
   return data.results[0].geometry.location; // { lat, lng }
 }
 
-async function nearbySearch(lat, lng) {
-  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=2000&keyword=barber%20salon%20hair&key=${GOOGLE_API_KEY}`;
+async function nearbySearch(lat, lng, pageToken = null) {
+  let url;
+  if (pageToken) {
+    url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=${encodeURIComponent(pageToken)}&key=${GOOGLE_API_KEY}`;
+  } else {
+    url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=2000&keyword=barber%20salon%20hair&key=${GOOGLE_API_KEY}`;
+  }
   const res = await fetch(url);
   const data = await res.json();
-  return data.results ?? [];
+  return { results: data.results ?? [], nextPageToken: data.next_page_token ?? null };
 }
 
 async function placeDetails(placeId) {
@@ -54,19 +59,9 @@ function detectPlatforms(website) {
   return platforms;
 }
 
-async function getGooglePlacesResults(location, searchLat = null, searchLng = null) {
-  let lat, lng;
-  if (searchLat != null && searchLng != null) {
-    lat = searchLat;
-    lng = searchLng;
-  } else {
-    ({ lat, lng } = await geocode(location));
-  }
-
-  const places = await nearbySearch(lat, lng);
-
-  const results = await Promise.all(
-    places.slice(0, 20).map(async (place) => {
+async function enrichPlaces(places, lat, lng) {
+  return Promise.all(
+    places.map(async (place) => {
       const details = await placeDetails(place.place_id);
 
       const website = details.website ?? null;
@@ -79,7 +74,7 @@ async function getGooglePlacesResults(location, searchLat = null, searchLng = nu
 
       const placeLat = details.geometry?.location?.lat ?? place.geometry?.location?.lat ?? null;
       const placeLng = details.geometry?.location?.lng ?? place.geometry?.location?.lng ?? null;
-      const distance = (placeLat != null && placeLng != null)
+      const distance = (placeLat != null && placeLng != null && lat != null && lng != null)
         ? haversineDistance(lat, lng, placeLat, placeLng)
         : null;
 
@@ -87,7 +82,30 @@ async function getGooglePlacesResults(location, searchLat = null, searchLng = nu
       return { ...salon, score: computeScore(salon) };
     })
   );
+}
 
+async function getGooglePlacesResults(location, searchLat = null, searchLng = null) {
+  let lat, lng;
+
+  if (searchLat != null && searchLng != null) {
+    lat = searchLat;
+    lng = searchLng;
+  } else {
+    ({ lat, lng } = await geocode(location));
+  }
+
+  let allPlaces = [];
+  let { results: places, nextPageToken } = await nearbySearch(lat, lng);
+  allPlaces = allPlaces.concat(places);
+
+  while (nextPageToken) {
+    await new Promise(r => setTimeout(r, 2000));
+    const next = await nearbySearch(null, null, nextPageToken);
+    allPlaces = allPlaces.concat(next.results);
+    nextPageToken = next.nextPageToken;
+  }
+
+  const results = await enrichPlaces(allPlaces, lat, lng);
   return results;
 }
 
@@ -116,6 +134,18 @@ function computeScore(salon) {
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+function sortResults(results) {
+  return results.sort((a, b) => {
+    const aNoSite = !a.website ? 0 : 1;
+    const bNoSite = !b.website ? 0 : 1;
+    if (aNoSite !== bNoSite) return aNoSite - bNoSite;
+    if (b.score !== a.score) return b.score - a.score;
+    const aDist = a.distance ?? Infinity;
+    const bDist = b.distance ?? Infinity;
+    return aDist - bDist;
+  });
+}
+
 app.post('/search', async (req, res) => {
   const { location, lat, lng } = req.body;
 
@@ -133,13 +163,7 @@ app.post('/search', async (req, res) => {
       typeof lat === 'number' ? lat : null,
       typeof lng === 'number' ? lng : null
     );
-    const ranked = results.sort((a, b) => {
-      const aNoSite = !a.website ? 0 : 1;
-      const bNoSite = !b.website ? 0 : 1;
-      if (aNoSite !== bNoSite) return aNoSite - bNoSite;
-      return b.score - a.score;
-    });
-    res.json(ranked);
+    res.json({ results: sortResults(results) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
