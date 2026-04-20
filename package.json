@@ -1,0 +1,19 @@
+{
+  "name": "barber-prospector",
+  "version": "1.0.0",
+  "description": "Outil de prospection locale pour identifier des barbershops sans site web",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "prospect": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "chalk": "^5.3.0",
+    "csv-stringify": "^6.4.6",
+    "dotenv": "^16.4.5",
+    "ora": "^8.0.1",
+    "prompts": "^2.4.2"
+  }
+}
