@@ -11,6 +11,16 @@ app.use(express.json());
 
 // ─── Google Places ────────────────────────────────────────────────────────────
 
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
 async function geocode(location) {
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&key=${GOOGLE_API_KEY}`;
   const res = await fetch(url);
@@ -27,7 +37,7 @@ async function nearbySearch(lat, lng) {
 }
 
 async function placeDetails(placeId) {
-  const fields = 'name,formatted_address,rating,user_ratings_total,website,url';
+  const fields = 'name,formatted_address,rating,user_ratings_total,website,url,geometry';
   const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${GOOGLE_API_KEY}`;
   const res = await fetch(url);
   const data = await res.json();
@@ -44,8 +54,15 @@ function detectPlatforms(website) {
   return platforms;
 }
 
-async function getGooglePlacesResults(location) {
-  const { lat, lng } = await geocode(location);
+async function getGooglePlacesResults(location, searchLat = null, searchLng = null) {
+  let lat, lng;
+  if (searchLat != null && searchLng != null) {
+    lat = searchLat;
+    lng = searchLng;
+  } else {
+    ({ lat, lng } = await geocode(location));
+  }
+
   const places = await nearbySearch(lat, lng);
 
   const results = await Promise.all(
@@ -60,7 +77,13 @@ async function getGooglePlacesResults(location) {
       const reviews = details.user_ratings_total ?? place.user_ratings_total ?? 0;
       const googleMapsUrl = details.url ?? `https://maps.google.com/?q=${encodeURIComponent(name)}`;
 
-      const salon = { name, address, rating, reviews, website, platforms, googleMapsUrl };
+      const placeLat = details.geometry?.location?.lat ?? place.geometry?.location?.lat ?? null;
+      const placeLng = details.geometry?.location?.lng ?? place.geometry?.location?.lng ?? null;
+      const distance = (placeLat != null && placeLng != null)
+        ? haversineDistance(lat, lng, placeLat, placeLng)
+        : null;
+
+      const salon = { name, address, rating, reviews, website, platforms, googleMapsUrl, distance };
       return { ...salon, score: computeScore(salon) };
     })
   );
@@ -94,7 +117,7 @@ function computeScore(salon) {
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 app.post('/search', async (req, res) => {
-  const { location } = req.body;
+  const { location, lat, lng } = req.body;
 
   if (!location || !location.trim()) {
     return res.status(400).json({ error: 'location requis' });
@@ -105,8 +128,17 @@ app.post('/search', async (req, res) => {
   }
 
   try {
-    const results = await getGooglePlacesResults(location.trim());
-    const ranked = results.sort((a, b) => b.score - a.score);
+    const results = await getGooglePlacesResults(
+      location.trim(),
+      typeof lat === 'number' ? lat : null,
+      typeof lng === 'number' ? lng : null
+    );
+    const ranked = results.sort((a, b) => {
+      if (a.distance != null && b.distance != null) return a.distance - b.distance;
+      if (a.distance != null) return -1;
+      if (b.distance != null) return 1;
+      return b.score - a.score;
+    });
     res.json(ranked);
   } catch (err) {
     console.error(err);

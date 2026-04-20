@@ -12,6 +12,9 @@ const detailPanel   = document.getElementById('detailPanel');
 let currentResults   = [];
 let displayedResults = [];
 let selectedIndex    = null;
+let searchLat        = null;
+let searchLng        = null;
+let acDebounce       = null;
 
 // ─── Search ───────────────────────────────────────────────────────────────────
 
@@ -28,10 +31,16 @@ async function search() {
   toolbarEl.classList.add('hidden');
 
   try {
+    const body = { location };
+    if (searchLat != null && searchLng != null) {
+      body.lat = searchLat;
+      body.lng = searchLng;
+    }
+
     const res = await fetch(`${API_URL}/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ location }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) throw new Error(`Erreur serveur (${res.status})`);
@@ -69,6 +78,7 @@ function renderResults(data) {
           ${webTag(s)}
           ${s.rating ? `<span class="tag rating">★ ${s.rating}</span>` : ''}
           ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
+          ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
         </div>
       </div>
       <button class="detail-btn" title="Voir le détail">👁</button>
@@ -131,12 +141,18 @@ function renderDetail(s) {
           : notFound
         }</div>
       </div>
+      ${s.distance != null ? `
+      <div class="detail-field">
+        <div class="detail-label">Distance</div>
+        <div class="detail-value">${formatDistance(s.distance)}</div>
+      </div>` : ''}
     </div>
 
     <div class="detail-meta">
       ${webTag(s)}
       ${s.rating  ? `<span class="tag rating">★ ${s.rating}</span>`     : ''}
       ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
+      ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
     </div>
 
     <a class="detail-maps-link" href="${s.googleMapsUrl}" target="_blank" rel="noopener">
@@ -157,6 +173,11 @@ function webTag(s) {
   return `<span class="tag has-site">Site propre</span>`;
 }
 
+function formatDistance(meters) {
+  if (meters < 1000) return `${meters} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
 function escape(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -169,10 +190,11 @@ function escape(str) {
 function downloadCSV() {
   if (!currentResults.length) return;
 
-  const headers = ['Nom', 'Adresse', 'Score', 'Note', 'Avis', 'Site web', 'Plateformes', 'Google Maps'];
+  const headers = ['Nom', 'Adresse', 'Distance', 'Score', 'Note', 'Avis', 'Site web', 'Plateformes', 'Google Maps'];
   const rows = currentResults.map((s) => [
     s.name,
     s.address,
+    s.distance != null ? formatDistance(s.distance) : '',
     s.score,
     s.rating ?? '',
     s.reviews ?? '',
@@ -211,3 +233,89 @@ function clearStatus() {
 searchBtn.addEventListener('click', search);
 locationInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
 downloadBtn.addEventListener('click', downloadCSV);
+
+// ─── Autocomplete (Île-de-France priority) ────────────────────────────────────
+
+const IDF_TERMS = /île.de.france|paris|hauts.de.seine|seine.saint.denis|val.de.marne|essonne|yvelines|val.d.oise|seine.et.marne/i;
+
+function initAutocomplete() {
+  const autocompleteService = new google.maps.places.AutocompleteService();
+  const placesService       = new google.maps.places.PlacesService(document.createElement('div'));
+  const dropdown            = document.getElementById('autocomplete-dropdown');
+  const IDF_CENTER          = new google.maps.LatLng(48.8566, 2.3522);
+
+  locationInput.addEventListener('input', () => {
+    searchLat = null;
+    searchLng = null;
+    clearTimeout(acDebounce);
+
+    const query = locationInput.value.trim();
+    if (!query) { hideDropdown(); return; }
+
+    acDebounce = setTimeout(() => {
+      autocompleteService.getPlacePredictions(
+        {
+          input: query,
+          types: ['(cities)'],
+          location: IDF_CENTER,
+          radius: 80000,
+          componentRestrictions: { country: 'fr' },
+        },
+        (predictions, status) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK && predictions?.length) {
+            showDropdown(predictions);
+          } else {
+            hideDropdown();
+          }
+        }
+      );
+    }, 300);
+  });
+
+  locationInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideDropdown();
+  });
+
+  function showDropdown(predictions) {
+    dropdown.innerHTML = '';
+    predictions.slice(0, 6).forEach((pred) => {
+      const isIDF = IDF_TERMS.test(pred.description);
+      const item  = document.createElement('div');
+      item.className = 'autocomplete-item' + (isIDF ? ' idf' : '');
+      item.innerHTML = `
+        <span class="ac-main">${escape(pred.structured_formatting?.main_text ?? pred.description)}</span>
+        <span class="ac-secondary">${escape(pred.structured_formatting?.secondary_text ?? '')}</span>
+        ${isIDF ? '<span class="ac-badge">Île-de-France</span>' : ''}
+      `;
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        selectPrediction(pred);
+      });
+      dropdown.appendChild(item);
+    });
+    dropdown.classList.remove('hidden');
+  }
+
+  function hideDropdown() {
+    dropdown.classList.add('hidden');
+  }
+
+  function selectPrediction(pred) {
+    locationInput.value = pred.description;
+    hideDropdown();
+
+    placesService.getDetails(
+      { placeId: pred.place_id, fields: ['geometry'] },
+      (place, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry) {
+          searchLat = place.geometry.location.lat();
+          searchLng = place.geometry.location.lng();
+        }
+      }
+    );
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.input-wrapper')) hideDropdown();
+  });
+}

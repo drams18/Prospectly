@@ -14,12 +14,16 @@
     </header>
 
     <div class="search-bar">
-      <input
-        id="locationInput"
-        type="text"
-        placeholder="Paris 18, Lyon, Bordeaux..."
-        autofocus
-      />
+      <div class="input-wrapper">
+        <input
+          id="locationInput"
+          type="text"
+          placeholder="Paris 18, Lyon, Bordeaux..."
+          autofocus
+          autocomplete="off"
+        />
+        <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
+      </div>
       <button id="searchBtn">Rechercher</button>
     </div>
 
@@ -37,5 +41,10 @@
   </div>
 
   <script src="app.js"></script>
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDu5OU_yf5-KHEWOvLHcfpDlWryJS-gHtk&libraries=places&callback=initAutocomplete"
+    async
+    defer
+  ></script>
 </body>
 </html>
