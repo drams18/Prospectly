@@ -134,9 +134,9 @@ app.post('/search', async (req, res) => {
       typeof lng === 'number' ? lng : null
     );
     const ranked = results.sort((a, b) => {
-      if (a.distance != null && b.distance != null) return a.distance - b.distance;
-      if (a.distance != null) return -1;
-      if (b.distance != null) return 1;
+      const aNoSite = !a.website ? 0 : 1;
+      const bNoSite = !b.website ? 0 : 1;
+      if (aNoSite !== bNoSite) return aNoSite - bNoSite;
       return b.score - a.score;
     });
     res.json(ranked);

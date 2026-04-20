@@ -256,7 +256,6 @@ function initAutocomplete() {
       autocompleteService.getPlacePredictions(
         {
           input: query,
-          types: ['(cities)'],
           location: IDF_CENTER,
           radius: 80000,
           componentRestrictions: { country: 'fr' },
