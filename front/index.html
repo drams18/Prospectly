@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prospectly</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>✂ Prospectly</h1>
+      <p>Trouvez des barbershops sans site web à prospecter</p>
+    </header>
+
+    <div class="search-bar">
+      <input
+        id="locationInput"
+        type="text"
+        placeholder="Paris 18, Lyon, Bordeaux..."
+        autofocus
+      />
+      <button id="searchBtn">Rechercher</button>
+    </div>
+
+    <div id="status" class="status hidden"></div>
+
+    <div id="toolbar" class="toolbar hidden">
+      <span id="resultCount"></span>
+      <button id="downloadBtn">⬇ Download CSV</button>
+    </div>
+
+    <div id="results"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
