@@ -33,6 +33,33 @@ const resultsEl     = document.getElementById('results');
 const downloadBtn   = document.getElementById('downloadBtn');
 const detailPanel   = document.getElementById('detailPanel');
 
+const mobileOverlay        = document.getElementById('mobileOverlay');
+const mobileOverlayContent = document.getElementById('mobileOverlayContent');
+const mobileOverlayClose   = document.getElementById('mobileOverlayClose');
+const mobileOverlayBackdrop = document.getElementById('mobileOverlayBackdrop');
+
+function isMobile() {
+  return window.innerWidth <= 640;
+}
+
+function openMobileOverlay(html) {
+  mobileOverlayContent.innerHTML = html;
+  mobileOverlay.setAttribute('aria-hidden', 'false');
+  mobileOverlay.classList.add('open');
+  mobileOverlayBackdrop.classList.add('visible');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobileOverlay() {
+  mobileOverlay.classList.remove('open');
+  mobileOverlayBackdrop.classList.remove('visible');
+  mobileOverlay.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+mobileOverlayClose.addEventListener('click', closeMobileOverlay);
+mobileOverlayBackdrop.addEventListener('click', closeMobileOverlay);
+
 let currentResults   = [];
 let displayedResults = [];
 let selectedIndex    = null;
@@ -93,6 +120,7 @@ function resetSearch() {
   displayedResults = [];
   resultsEl.innerHTML = '';
   detailPanel.classList.add('hidden');
+  closeMobileOverlay();
   toolbarEl.classList.add('hidden');
   selectedIndex = null;
   clearStatus();
@@ -116,6 +144,7 @@ async function search() {
   searchBtn.disabled = true;
   resultsEl.innerHTML = '';
   detailPanel.classList.add('hidden');
+  closeMobileOverlay();
   selectedIndex = null;
   displayedResults = [];
   currentResults = [];
@@ -244,11 +273,7 @@ function renderDetail(s) {
 
   const notFound = '<span class="not-found">information non trouvée</span>';
 
-  detailPanel.classList.remove('hidden');
-  if (window.innerWidth <= 640) {
-    detailPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-  detailPanel.innerHTML = `
+  const html = `
     <div class="detail-header">
       <div class="score-badge ${scorePriority(s.score)} detail-score">${s.score}</div>
       <div class="detail-title-block">
@@ -295,6 +320,13 @@ function renderDetail(s) {
       Voir sur Google Maps ↗
     </a>
   `;
+
+  if (isMobile()) {
+    openMobileOverlay(html);
+  } else {
+    detailPanel.classList.remove('hidden');
+    detailPanel.innerHTML = html;
+  }
 }
 
 function scorePriority(score) {
