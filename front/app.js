@@ -62,6 +62,25 @@ function markSeen(s) {
   localStorage.setItem('prospectly_seen', JSON.stringify([...seen]));
 }
 
+// ─── Search history (localStorage) ────────────────────────────────────────────
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem('prospectly_history') || '[]'); }
+  catch { return []; }
+}
+
+function addToHistory(location) {
+  const history = loadHistory().filter(h => h !== location);
+  history.unshift(location);
+  localStorage.setItem('prospectly_history', JSON.stringify(history.slice(0, 10)));
+}
+
+function removeFromHistory(location) {
+  localStorage.setItem('prospectly_history', JSON.stringify(
+    loadHistory().filter(h => h !== location)
+  ));
+}
+
 // ─── Reset ────────────────────────────────────────────────────────────────────
 
 function resetSearch() {
@@ -120,6 +139,7 @@ async function search() {
 
     const data = await res.json();
     currentResults = Array.isArray(data) ? data : (data.results ?? []);
+    addToHistory(location);
     renderResults();
     clearStatus();
   } catch (err) {
@@ -297,15 +317,25 @@ function escape(str) {
     .replace(/>/g, '&gt;');
 }
 
+function highlightMatch(text, query) {
+  if (!query) return escape(text);
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return escape(text);
+  return escape(text.slice(0, idx))
+    + `<mark class="ac-highlight">${escape(text.slice(idx, idx + query.length))}</mark>`
+    + escape(text.slice(idx + query.length));
+}
+
 // ─── CSV ──────────────────────────────────────────────────────────────────────
 
 function downloadCSV() {
   if (!currentResults.length) return;
 
-  const headers = ['Nom', 'Adresse', 'Distance', 'Score', 'Note', 'Avis', 'Site web', 'Plateformes', 'Google Maps'];
+  const headers = ['Nom', 'Adresse', 'Téléphone', 'Distance', 'Score', 'Note', 'Avis', 'Site web', 'Plateformes', 'Google Maps'];
   const rows = currentResults.map((s) => [
     s.name,
     s.address,
+    s.phone ?? '',
     s.distance != null ? formatDistance(s.distance) : '',
     s.score,
     s.rating ?? '',
@@ -347,7 +377,7 @@ locationInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search
 downloadBtn.addEventListener('click', downloadCSV);
 resetBtn.addEventListener('click', resetSearch);
 
-// ─── Autocomplete (Île-de-France priority) ────────────────────────────────────
+// ─── Autocomplete + History (Île-de-France priority) ─────────────────────────
 
 const IDF_TERMS = /île.de.france|paris|hauts.de.seine|seine.saint.denis|val.de.marne|essonne|yvelines|val.d.oise|seine.et.marne/i;
 
@@ -357,15 +387,26 @@ function initAutocomplete() {
   const dropdown            = document.getElementById('autocomplete-dropdown');
   const IDF_CENTER          = new google.maps.LatLng(48.8566, 2.3522);
 
+  locationInput.addEventListener('focus', () => {
+    if (!locationInput.value.trim()) renderDropdown(loadHistory(), [], '');
+  });
+
   locationInput.addEventListener('input', () => {
     searchLat = null;
     searchLng = null;
     clearTimeout(acDebounce);
 
     const query = locationInput.value.trim();
-    if (!query) { hideDropdown(); return; }
+    if (!query) {
+      renderDropdown(loadHistory(), [], '');
+      return;
+    }
 
     acDebounce = setTimeout(() => {
+      const historyMatches = loadHistory().filter(h =>
+        h.toLowerCase().includes(query.toLowerCase())
+      );
+
       autocompleteService.getPlacePredictions(
         {
           input: query,
@@ -374,11 +415,8 @@ function initAutocomplete() {
           componentRestrictions: { country: 'fr' },
         },
         (predictions, status) => {
-          if (status === google.maps.places.PlacesServiceStatus.OK && predictions?.length) {
-            showDropdown(predictions);
-          } else {
-            hideDropdown();
-          }
+          const preds = (status === google.maps.places.PlacesServiceStatus.OK && predictions) ? predictions : [];
+          renderDropdown(historyMatches, preds, query);
         }
       );
     }, 300);
@@ -388,15 +426,34 @@ function initAutocomplete() {
     if (e.key === 'Escape') hideDropdown();
   });
 
-  function showDropdown(predictions) {
+  function renderDropdown(historyItems, predictions, query) {
     dropdown.innerHTML = '';
-    predictions.slice(0, 6).forEach((pred) => {
+
+    if (!historyItems.length && !predictions.length) {
+      hideDropdown();
+      return;
+    }
+
+    if (historyItems.length) {
+      if (!query) {
+        const header = document.createElement('div');
+        header.className = 'ac-section-header';
+        header.textContent = 'Recherches récentes';
+        dropdown.appendChild(header);
+      }
+      historyItems.forEach(loc => dropdown.appendChild(createHistoryItem(loc, query)));
+    }
+
+    const maxPreds = Math.max(0, 6 - historyItems.length);
+    predictions.slice(0, maxPreds).forEach((pred) => {
       const isIDF = IDF_TERMS.test(pred.description);
       const item  = document.createElement('div');
       item.className = 'autocomplete-item' + (isIDF ? ' idf' : '');
+      const mainText = pred.structured_formatting?.main_text ?? pred.description;
+      const secText  = pred.structured_formatting?.secondary_text ?? '';
       item.innerHTML = `
-        <span class="ac-main">${escape(pred.structured_formatting?.main_text ?? pred.description)}</span>
-        <span class="ac-secondary">${escape(pred.structured_formatting?.secondary_text ?? '')}</span>
+        <span class="ac-main">${highlightMatch(mainText, query)}</span>
+        <span class="ac-secondary">${escape(secText)}</span>
         ${isIDF ? '<span class="ac-badge">Île-de-France</span>' : ''}
       `;
       item.addEventListener('mousedown', (e) => {
@@ -405,7 +462,46 @@ function initAutocomplete() {
       });
       dropdown.appendChild(item);
     });
+
     dropdown.classList.remove('hidden');
+  }
+
+  function createHistoryItem(loc, query) {
+    const item = document.createElement('div');
+    item.className = 'autocomplete-item history-item';
+
+    const icon = document.createElement('span');
+    icon.className = 'ac-icon';
+    icon.textContent = '🕐';
+
+    const main = document.createElement('span');
+    main.className = 'ac-main';
+    main.innerHTML = query ? highlightMatch(loc, query) : escape(loc);
+
+    const del = document.createElement('button');
+    del.className = 'ac-delete';
+    del.title = "Supprimer de l'historique";
+    del.textContent = '×';
+
+    item.append(icon, main, del);
+
+    del.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      removeFromHistory(loc);
+      item.remove();
+      if (!dropdown.querySelector('.autocomplete-item')) hideDropdown();
+    });
+
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      locationInput.value = loc;
+      searchLat = null;
+      searchLng = null;
+      hideDropdown();
+    });
+
+    return item;
   }
 
   function hideDropdown() {

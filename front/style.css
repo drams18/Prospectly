@@ -500,6 +500,53 @@ header p {
   opacity: 1;
 }
 
+/* Search history dropdown */
+.ac-section-header {
+  padding: 8px 14px 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #aaa;
+}
+
+.history-item {
+  border-left-color: transparent !important;
+}
+
+.ac-icon {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+.ac-delete {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.1s, background 0.1s;
+}
+
+.ac-delete:hover {
+  color: #555;
+  background: #eee;
+}
+
+.ac-highlight {
+  background: none;
+  font-weight: 700;
+  color: #111;
+}
+
 /* "Déjà vue" badge */
 .badge-seen {
   font-size: 0.72rem;

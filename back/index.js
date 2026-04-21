@@ -42,7 +42,7 @@ async function nearbySearch(lat, lng, pageToken = null, keyword = 'barber') {
 }
 
 async function placeDetails(placeId) {
-  const fields = 'name,formatted_address,rating,user_ratings_total,website,url,geometry';
+  const fields = 'name,formatted_address,formatted_phone_number,rating,user_ratings_total,website,url,geometry';
   const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${GOOGLE_API_KEY}`;
   const res = await fetch(url);
   const data = await res.json();
@@ -68,6 +68,7 @@ async function enrichPlaces(places, lat, lng) {
       const platforms = detectPlatforms(website);
       const name = details.name ?? place.name;
       const address = details.formatted_address ?? place.vicinity ?? '';
+      const phone = details.formatted_phone_number ?? null;
       const rating = details.rating ?? place.rating ?? 0;
       const reviews = details.user_ratings_total ?? place.user_ratings_total ?? 0;
       const googleMapsUrl = details.url ?? `https://maps.google.com/?q=${encodeURIComponent(name)}`;
@@ -78,7 +79,7 @@ async function enrichPlaces(places, lat, lng) {
         ? haversineDistance(lat, lng, placeLat, placeLng)
         : null;
 
-      const salon = { name, address, rating, reviews, website, platforms, googleMapsUrl, distance };
+      const salon = { name, address, phone, rating, reviews, website, platforms, googleMapsUrl, distance };
       return { ...salon, score: computeScore(salon) };
     })
   );
@@ -94,19 +95,20 @@ async function getGooglePlacesResults(location, searchLat = null, searchLng = nu
     ({ lat, lng } = await geocode(location));
   }
 
+  const MAX_RESULTS = 30;
   const keyword = query.trim() || 'barber';
   let allPlaces = [];
   let { results: places, nextPageToken } = await nearbySearch(lat, lng, null, keyword);
   allPlaces = allPlaces.concat(places);
 
-  while (nextPageToken) {
+  while (nextPageToken && allPlaces.length < MAX_RESULTS) {
     await new Promise(r => setTimeout(r, 2000));
     const next = await nearbySearch(null, null, nextPageToken);
     allPlaces = allPlaces.concat(next.results);
     nextPageToken = next.nextPageToken;
   }
 
-  const results = await enrichPlaces(allPlaces, lat, lng);
+  const results = await enrichPlaces(allPlaces.slice(0, MAX_RESULTS), lat, lng);
   return results;
 }
 
