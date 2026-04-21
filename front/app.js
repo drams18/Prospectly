@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3001';
+const API_URL = 'https://prospectly-production-a949.up.railway.app';
 
 const locationInput    = document.getElementById('locationInput');
 const searchBtn        = document.getElementById('searchBtn');
@@ -143,6 +143,7 @@ async function search() {
     renderResults();
     clearStatus();
   } catch (err) {
+    console.error('[Prospectly] Erreur API /search :', err);
     setStatus(`Erreur : ${err.message}`, true);
   } finally {
     searchBtn.disabled = false;
@@ -244,6 +245,9 @@ function renderDetail(s) {
   const notFound = '<span class="not-found">information non trouvée</span>';
 
   detailPanel.classList.remove('hidden');
+  if (window.innerWidth <= 640) {
+    detailPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   detailPanel.innerHTML = `
     <div class="detail-header">
       <div class="score-badge ${scorePriority(s.score)} detail-score">${s.score}</div>

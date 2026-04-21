@@ -556,3 +556,66 @@ header p {
   background: #e2e3e5;
   color: #555;
 }
+
+/* ── Mobile responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .container {
+    padding: 20px 12px;
+  }
+
+  header {
+    margin-bottom: 20px;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
+  .search-row {
+    flex-wrap: wrap;
+  }
+
+  .search-row .input-wrapper {
+    flex: 1 1 100%;
+  }
+
+  .search-row button {
+    flex: 1 1 100%;
+  }
+
+  .filters {
+    gap: 6px;
+  }
+
+  .filter-btn {
+    padding: 7px 12px;
+    font-size: 0.8rem;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  #downloadBtn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .results-layout {
+    flex-direction: column;
+  }
+
+  .results-list {
+    width: 100%;
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
+  }
+
+  .detail-panel {
+    position: static;
+    width: 100%;
+    margin-top: 8px;
+  }
+}
