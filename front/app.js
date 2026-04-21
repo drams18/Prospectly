@@ -2,6 +2,19 @@ const API_URL = 'http://localhost:3001';
 
 const locationInput = document.getElementById('locationInput');
 const searchBtn     = document.getElementById('searchBtn');
+
+const filterBtns = document.querySelectorAll('.filter-btn');
+filterBtns.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    filterBtns.forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+function getSelectedQuery() {
+  const active = document.querySelector('.filter-btn.active');
+  return active ? active.dataset.query : 'barber';
+}
 const statusEl      = document.getElementById('status');
 const toolbarEl     = document.getElementById('toolbar');
 const resultCountEl = document.getElementById('resultCount');
@@ -35,7 +48,7 @@ async function search() {
   toolbarEl.classList.add('hidden');
 
   try {
-    const body = { location };
+    const body = { location, query: getSelectedQuery() };
     if (searchLat != null && searchLng != null) {
       body.lat = searchLat;
       body.lng = searchLng;

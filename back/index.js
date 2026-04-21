@@ -29,12 +29,12 @@ async function geocode(location) {
   return data.results[0].geometry.location; // { lat, lng }
 }
 
-async function nearbySearch(lat, lng, pageToken = null) {
+async function nearbySearch(lat, lng, pageToken = null, keyword = 'barber') {
   let url;
   if (pageToken) {
     url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?pagetoken=${encodeURIComponent(pageToken)}&key=${GOOGLE_API_KEY}`;
   } else {
-    url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=2000&keyword=barber%20salon%20hair&key=${GOOGLE_API_KEY}`;
+    url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=2000&keyword=${encodeURIComponent(keyword)}&key=${GOOGLE_API_KEY}`;
   }
   const res = await fetch(url);
   const data = await res.json();
@@ -84,7 +84,7 @@ async function enrichPlaces(places, lat, lng) {
   );
 }
 
-async function getGooglePlacesResults(location, searchLat = null, searchLng = null) {
+async function getGooglePlacesResults(location, searchLat = null, searchLng = null, query = 'barber') {
   let lat, lng;
 
   if (searchLat != null && searchLng != null) {
@@ -94,8 +94,9 @@ async function getGooglePlacesResults(location, searchLat = null, searchLng = nu
     ({ lat, lng } = await geocode(location));
   }
 
+  const keyword = query.trim() || 'barber';
   let allPlaces = [];
-  let { results: places, nextPageToken } = await nearbySearch(lat, lng);
+  let { results: places, nextPageToken } = await nearbySearch(lat, lng, null, keyword);
   allPlaces = allPlaces.concat(places);
 
   while (nextPageToken) {
@@ -147,7 +148,7 @@ function sortResults(results) {
 }
 
 app.post('/search', async (req, res) => {
-  const { location, lat, lng } = req.body;
+  const { location, lat, lng, query } = req.body;
 
   if (!location || !location.trim()) {
     return res.status(400).json({ error: 'location requis' });
@@ -161,7 +162,8 @@ app.post('/search', async (req, res) => {
     const results = await getGooglePlacesResults(
       location.trim(),
       typeof lat === 'number' ? lat : null,
-      typeof lng === 'number' ? lng : null
+      typeof lng === 'number' ? lng : null,
+      typeof query === 'string' ? query : 'barber'
     );
     res.json({ results: sortResults(results) });
   } catch (err) {

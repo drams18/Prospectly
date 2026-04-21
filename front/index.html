@@ -10,21 +10,30 @@
   <div class="container">
     <header>
       <h1>✂ Prospectly</h1>
-      <p>Trouvez des barbershops sans site web à prospecter</p>
+      <p>Trouvez des businesses sans site web à prospecter</p>
     </header>
 
     <div class="search-bar">
-      <div class="input-wrapper">
-        <input
-          id="locationInput"
-          type="text"
-          placeholder="Paris 18, Lyon, Bordeaux..."
-          autofocus
-          autocomplete="off"
-        />
-        <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
+      <div class="search-row">
+        <div class="input-wrapper">
+          <input
+            id="locationInput"
+            type="text"
+            placeholder="Paris 18, Lyon, Bordeaux..."
+            autofocus
+            autocomplete="off"
+          />
+          <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
+        </div>
+        <button id="searchBtn">Rechercher</button>
       </div>
-      <button id="searchBtn">Rechercher</button>
+      <div class="filters">
+        <button class="filter-btn active" data-query="barber">Barber</button>
+        <button class="filter-btn" data-query="restaurant">Restaurant</button>
+        <button class="filter-btn" data-query="hair salon">Salon</button>
+        <button class="filter-btn" data-query="cafe">Café</button>
+        <button class="filter-btn" data-query="car repair">Garage</button>
+      </div>
     </div>
 
     <div id="status" class="status hidden"></div>
