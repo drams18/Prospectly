@@ -27,13 +27,17 @@
         </div>
         <button id="searchBtn">Rechercher</button>
       </div>
-      <div class="filters">
-        <button class="filter-btn active" data-query="barber">Barber</button>
-        <button class="filter-btn" data-query="restaurant">Restaurant</button>
-        <button class="filter-btn" data-query="hair salon">Salon</button>
-        <button class="filter-btn" data-query="cafe">Café</button>
-        <button class="filter-btn" data-query="car repair">Garage</button>
+      <div class="filters-row">
+        <div class="filters" id="filtersContainer">
+          <button class="filter-btn" data-query="barber">Barber</button>
+          <button class="filter-btn" data-query="restaurant">Restaurant</button>
+          <button class="filter-btn" data-query="hair salon">Salon</button>
+          <button class="filter-btn" data-query="cafe">Café</button>
+          <button class="filter-btn" data-query="car repair">Garage</button>
+        </div>
+        <button id="resetBtn" class="reset-btn hidden">↺ Réinitialiser</button>
       </div>
+      <div id="filterError" class="filter-error hidden"></div>
     </div>
 
     <div id="status" class="status hidden"></div>

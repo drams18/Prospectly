@@ -48,11 +48,19 @@ header p {
   align-items: center;
 }
 
+.filters-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1 1 100%;
+}
+
 .filters {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  flex: 1 1 100%;
+  flex: 1;
 }
 
 .filter-btn {
@@ -448,3 +456,56 @@ header p {
 }
 
 .hidden { display: none !important; }
+
+/* Filter error */
+.filter-error {
+  font-size: 0.82rem;
+  color: #c0392b;
+  margin-top: 2px;
+}
+
+/* Reset button */
+.reset-btn {
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border: 1.5px solid #c0392b;
+  border-radius: 20px;
+  background: #fff;
+  color: #c0392b;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.reset-btn:hover {
+  background: #c0392b;
+  color: #fff;
+}
+
+/* Locked filters: inactive buttons dimmed and non-clickable */
+.filters.locked .filter-btn:not(.active) {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Seen prospect cards */
+.card.seen {
+  opacity: 0.5;
+}
+
+.card.seen.selected {
+  opacity: 1;
+}
+
+/* "Déjà vue" badge */
+.badge-seen {
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 20px;
+  font-weight: 600;
+  background: #e2e3e5;
+  color: #555;
+}

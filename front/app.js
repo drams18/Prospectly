@@ -1,20 +1,31 @@
 const API_URL = 'http://localhost:3001';
 
-const locationInput = document.getElementById('locationInput');
-const searchBtn     = document.getElementById('searchBtn');
+const locationInput    = document.getElementById('locationInput');
+const searchBtn        = document.getElementById('searchBtn');
+const filtersContainer = document.getElementById('filtersContainer');
+const resetBtn         = document.getElementById('resetBtn');
+const filterErrorEl    = document.getElementById('filterError');
 
 const filterBtns = document.querySelectorAll('.filter-btn');
+let filtersLocked = false;
+
 filterBtns.forEach((btn) => {
   btn.addEventListener('click', () => {
+    if (filtersLocked) return;
     filterBtns.forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
+    filtersLocked = true;
+    filtersContainer.classList.add('locked');
+    resetBtn.classList.remove('hidden');
+    filterErrorEl.classList.add('hidden');
   });
 });
 
 function getSelectedQuery() {
   const active = document.querySelector('.filter-btn.active');
-  return active ? active.dataset.query : 'barber';
+  return active ? active.dataset.query : null;
 }
+
 const statusEl      = document.getElementById('status');
 const toolbarEl     = document.getElementById('toolbar');
 const resultCountEl = document.getElementById('resultCount');
@@ -31,11 +42,56 @@ let acDebounce       = null;
 let currentPage      = 1;
 const PAGE_SIZE      = 10;
 
+// ─── Seen prospects (localStorage) ────────────────────────────────────────────
+
+function seenKey(s) {
+  return `${s.name}||${s.address}`;
+}
+
+function loadSeen() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('prospectly_seen') || '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
+function markSeen(s) {
+  const seen = loadSeen();
+  seen.add(seenKey(s));
+  localStorage.setItem('prospectly_seen', JSON.stringify([...seen]));
+}
+
+// ─── Reset ────────────────────────────────────────────────────────────────────
+
+function resetSearch() {
+  filtersLocked = false;
+  filterBtns.forEach((b) => b.classList.remove('active'));
+  filtersContainer.classList.remove('locked');
+  resetBtn.classList.add('hidden');
+  filterErrorEl.classList.add('hidden');
+  currentResults = [];
+  displayedResults = [];
+  resultsEl.innerHTML = '';
+  detailPanel.classList.add('hidden');
+  toolbarEl.classList.add('hidden');
+  selectedIndex = null;
+  clearStatus();
+}
+
 // ─── Search ───────────────────────────────────────────────────────────────────
 
 async function search() {
   const location = locationInput.value.trim();
   if (!location) return;
+
+  const query = getSelectedQuery();
+  if (!query) {
+    filterErrorEl.textContent = 'Veuillez sélectionner un type de business';
+    filterErrorEl.classList.remove('hidden');
+    return;
+  }
+  filterErrorEl.classList.add('hidden');
 
   setStatus('Recherche en cours…');
   searchBtn.disabled = true;
@@ -48,7 +104,7 @@ async function search() {
   toolbarEl.classList.add('hidden');
 
   try {
-    const body = { location, query: getSelectedQuery() };
+    const body = { location, query };
     if (searchLat != null && searchLng != null) {
       body.lat = searchLat;
       body.lng = searchLng;
@@ -86,28 +142,33 @@ function renderResults() {
     return;
   }
 
+  const seen = loadSeen();
   displayedResults = currentResults.slice(0, currentPage * PAGE_SIZE);
   const hasMore = displayedResults.length < currentResults.length;
 
   resultCountEl.textContent = `${currentResults.length} prospect${currentResults.length > 1 ? 's' : ''} trouvé${currentResults.length > 1 ? 's' : ''}`;
   toolbarEl.classList.remove('hidden');
 
-  const cards = displayedResults.map((s, i) => `
-    <div class="card" data-index="${i}">
-      <div class="score-badge ${scorePriority(s.score)}">${s.score}</div>
-      <div class="card-body">
-        <div class="card-name">${escape(s.name)}</div>
-        <div class="card-address">${escape(s.address)}</div>
-        <div class="card-meta">
-          ${webTag(s)}
-          ${s.rating ? `<span class="tag rating">★ ${s.rating}</span>` : ''}
-          ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
-          ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
+  const cards = displayedResults.map((s, i) => {
+    const isSeen = seen.has(seenKey(s));
+    return `
+      <div class="card${isSeen ? ' seen' : ''}" data-index="${i}">
+        <div class="score-badge ${scorePriority(s.score)}">${s.score}</div>
+        <div class="card-body">
+          <div class="card-name">${escape(s.name)}</div>
+          <div class="card-address">${escape(s.address)}</div>
+          <div class="card-meta">
+            ${isSeen ? '<span class="badge-seen">Déjà vue</span>' : ''}
+            ${webTag(s)}
+            ${s.rating ? `<span class="tag rating">★ ${s.rating}</span>` : ''}
+            ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
+            ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
+          </div>
         </div>
+        <button class="detail-btn" title="Voir le détail">👁</button>
       </div>
-      <button class="detail-btn" title="Voir le détail">👁</button>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   const loadMoreHtml = hasMore
     ? `<button id="loadMoreBtn" class="load-more-btn">Voir plus de résultats</button>`
@@ -130,12 +191,30 @@ function handleCardClick(e) {
 
 function selectProspect(index) {
   selectedIndex = index;
+  const prospect = displayedResults[index];
+
+  markSeen(prospect);
 
   resultsEl.querySelectorAll('.card').forEach((card) => {
-    card.classList.toggle('selected', parseInt(card.dataset.index, 10) === index);
+    const cardIndex = parseInt(card.dataset.index, 10);
+    const isSelected = cardIndex === index;
+    card.classList.toggle('selected', isSelected);
+
+    if (isSelected) {
+      card.classList.add('seen');
+      if (!card.querySelector('.badge-seen')) {
+        const meta = card.querySelector('.card-meta');
+        if (meta) {
+          const badge = document.createElement('span');
+          badge.className = 'badge-seen';
+          badge.textContent = 'Déjà vue';
+          meta.insertBefore(badge, meta.firstChild);
+        }
+      }
+    }
   });
 
-  renderDetail(displayedResults[index]);
+  renderDetail(prospect);
 }
 
 function renderDetail(s) {
@@ -266,6 +345,7 @@ function clearStatus() {
 searchBtn.addEventListener('click', search);
 locationInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
 downloadBtn.addEventListener('click', downloadCSV);
+resetBtn.addEventListener('click', resetSearch);
 
 // ─── Autocomplete (Île-de-France priority) ────────────────────────────────────
 
