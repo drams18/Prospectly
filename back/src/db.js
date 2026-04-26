@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH ?? resolve(__dirname, '../../data/prospectly.db');
+const DB_PATH = process.env.DB_PATH ?? resolve(__dirname, '../data/prospectly.db');
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
