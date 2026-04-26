@@ -16,7 +16,11 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const PLACES_BASE = 'https://maps.googleapis.com/maps/api/place';
 
-app.use(cors());
+app.use(cors({
+  origin: ['https://drams18.github.io', 'http://localhost:5173', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
