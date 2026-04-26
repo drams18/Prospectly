@@ -72,6 +72,20 @@ let searchLng        = null;
 let acDebounce       = null;
 let currentPage      = 1;
 const PAGE_SIZE      = 10;
+let parcoursSet      = new Set();
+
+// ─── Parcours set (in-memory, loaded at startup) ──────────────────────────────
+
+async function loadParcoursSet() {
+  try {
+    const res = await fetch(`${API_URL}/parcours`, { headers: Auth.authHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    parcoursSet = new Set((data.parcours || []).map(p => `${p.name}||${p.address}`));
+  } catch {}
+}
+
+loadParcoursSet();
 
 // ─── Seen prospects (localStorage) ────────────────────────────────────────────
 
@@ -328,7 +342,10 @@ function renderDetail(s) {
       Voir sur Google Maps ↗
     </a>
 
-    <button class="btn-add-parcours" id="addParcoursBtn">+ Ajouter au parcours</button>
+    ${parcoursSet.has(`${s.name}||${s.address}`)
+      ? `<button class="btn-add-parcours btn-added" id="addParcoursBtn" disabled>Déjà dans le parcours</button>`
+      : `<button class="btn-add-parcours" id="addParcoursBtn">+ Ajouter au parcours</button>`
+    }
   `;
 
   if (isMobile()) {
@@ -369,8 +386,10 @@ async function addToParcours(prospect) {
     if (res.status === 401) { Auth.logout(); return; }
     if (!res.ok) throw new Error('Erreur serveur');
 
-    btn.textContent = 'Ajouté !';
+    btn.textContent = 'Déjà dans le parcours';
     btn.classList.add('btn-added');
+    btn.disabled = true;
+    parcoursSet.add(`${prospect.name}||${prospect.address}`);
   } catch {
     btn.disabled = false;
     btn.textContent = '+ Ajouter au parcours';

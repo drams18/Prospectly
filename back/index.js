@@ -46,7 +46,7 @@ async function nearbySearch(lat, lng, keyword, pageToken = null) {
 }
 
 async function searchPlaces(lat, lng, keyword) {
-  const MAX = 30;
+  const MAX = 50;
   let all = [];
   let { results, nextPageToken } = await nearbySearch(lat, lng, keyword);
   all = all.concat(results);
