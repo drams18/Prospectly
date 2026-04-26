@@ -700,3 +700,221 @@ header p {
     margin-top: 8px;
   }
 }
+
+/* ── Auth bar ───────────────────────────────────────────────────────────────── */
+.auth-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+
+.auth-username {
+  color: #555;
+  font-weight: 500;
+}
+
+.logout-btn {
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: none;
+  border: 1.5px solid #ccc;
+  border-radius: 6px;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.logout-btn:hover {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+.nav-link {
+  color: #1a6080;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.nav-link:hover { text-decoration: underline; }
+
+/* ── Auth pages (login / register) ─────────────────────────────────────────── */
+.auth-container {
+  max-width: 420px;
+}
+
+.auth-form {
+  background: #fff;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.field-hint {
+  font-weight: 400;
+  color: #999;
+}
+
+.form-field input {
+  padding: 10px 14px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.form-field input:focus {
+  border-color: #111;
+}
+
+.auth-error {
+  background: #fde8e8;
+  color: #c0392b;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.auth-switch {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.auth-switch a {
+  color: #1a6080;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-switch a:hover { text-decoration: underline; }
+
+/* ── Web quality badges ─────────────────────────────────────────────────────── */
+.tag.bad-site { background: #fff0e0; color: #b45309; }
+
+/* ── Add to parcours button ─────────────────────────────────────────────────── */
+.btn-add-parcours {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 10px;
+  background: #111;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-add-parcours:hover:not(:disabled) { background: #333; }
+.btn-add-parcours:disabled { background: #999; cursor: default; }
+.btn-add-parcours.btn-added { background: #27ae60; }
+.btn-add-parcours.btn-added:hover { background: #27ae60; }
+
+/* ── Parcours page ──────────────────────────────────────────────────────────── */
+.parcours-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.parcours-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.parcours-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  align-items: flex-start;
+}
+
+.parcours-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.parcours-phone {
+  font-size: 0.85rem;
+  margin-top: 3px;
+}
+
+.parcours-phone a {
+  color: #1a6080;
+  text-decoration: none;
+}
+
+.parcours-phone a:hover { text-decoration: underline; }
+
+.parcours-status-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.status-select {
+  padding: 5px 8px;
+  border: 1.5px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.status-select:focus { outline: none; border-color: #111; }
+
+.btn-delete {
+  padding: 5px 10px;
+  background: none;
+  border: 1.5px solid #e74c3c;
+  color: #e74c3c;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: auto;
+}
+
+.btn-delete:hover { background: #e74c3c; color: #fff; }
+
+.empty-state {
+  color: #aaa;
+  text-align: center;
+  padding: 48px 0;
+  font-style: italic;
+  font-size: 0.9rem;
+}

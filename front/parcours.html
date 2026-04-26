@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mon Parcours — Prospectly</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="auth-bar">
+      <a href="index.html" class="nav-link">← Retour</a>
+      <span id="usernameDisplay" class="auth-username"></span>
+      <button id="logoutBtn" class="logout-btn">Déconnexion</button>
+    </div>
+
+    <header>
+      <h1>Mon Parcours</h1>
+      <p>Gérez vos prospects sauvegardés</p>
+    </header>
+
+    <div id="status" class="status hidden"></div>
+
+    <div id="parcoursFilters" class="parcours-filters">
+      <button class="filter-btn active" data-status="all">Tous</button>
+      <button class="filter-btn" data-status="todo">À faire</button>
+      <button class="filter-btn" data-status="visited">Visité</button>
+      <button class="filter-btn" data-status="interested">Intéressé</button>
+      <button class="filter-btn" data-status="not_interested">Pas intéressé</button>
+    </div>
+
+    <div id="parcoursList" class="parcours-list"></div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script src="parcours.js"></script>
+</body>
+</html>

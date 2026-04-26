@@ -8,6 +8,12 @@
 </head>
 <body>
   <div class="container">
+    <div class="auth-bar">
+      <span id="usernameDisplay" class="auth-username"></span>
+      <a href="parcours.html" class="nav-link">Mon Parcours</a>
+      <button id="logoutBtn" class="logout-btn">Déconnexion</button>
+    </div>
+
     <header>
       <h1>Prospectly</h1>
       <p>Trouvez des businesses sans site web à prospecter</p>
@@ -44,7 +50,6 @@
 
     <div id="toolbar" class="toolbar hidden">
       <span id="resultCount"></span>
-      <button id="downloadBtn">⬇ Download CSV</button>
     </div>
 
     <div class="results-layout">
@@ -60,6 +65,7 @@
   </div>
   <div id="mobileOverlayBackdrop" class="mobile-overlay-backdrop"></div>
 
+  <script src="auth.js"></script>
   <script src="app.js"></script>
   <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDu5OU_yf5-KHEWOvLHcfpDlWryJS-gHtk&libraries=places&callback=initAutocomplete"

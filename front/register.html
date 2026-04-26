@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Créer un compte — Prospectly</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container auth-container">
+    <header>
+      <h1>Prospectly</h1>
+      <p>Créez votre compte pour commencer</p>
+    </header>
+
+    <form id="registerForm" class="auth-form">
+      <div id="authError" class="auth-error hidden"></div>
+
+      <div class="form-field">
+        <label for="username">Nom d'utilisateur</label>
+        <input id="username" type="text" autocomplete="username" autocorrect="off" autocapitalize="none" required />
+      </div>
+
+      <div class="form-field">
+        <label for="password">Mot de passe <span class="field-hint">(min. 6 caractères)</span></label>
+        <input id="password" type="password" autocomplete="new-password" required minlength="6" />
+      </div>
+
+      <button type="submit" id="submitBtn">Créer le compte</button>
+
+      <p class="auth-switch">Déjà un compte ? <a href="login.html">Se connecter</a></p>
+    </form>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    if (Auth.getToken()) window.location.href = 'index.html';
+
+    const form = document.getElementById('registerForm');
+    const errorEl = document.getElementById('authError');
+    const submitBtn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Création...';
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (password.length < 6) {
+        errorEl.textContent = 'Le mot de passe doit contenir au moins 6 caractères';
+        errorEl.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Créer le compte';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorEl.textContent = data.error || 'Erreur lors de la création du compte';
+          errorEl.classList.remove('hidden');
+          return;
+        }
+
+        window.location.href = 'login.html';
+      } catch {
+        errorEl.textContent = 'Impossible de contacter le serveur';
+        errorEl.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Créer le compte';
+      }
+    });
+  </script>
+</body>
+</html>

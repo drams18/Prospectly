@@ -1,4 +1,9 @@
-const API_URL = 'https://prospectly-production-a949.up.railway.app';
+// Auth guard — redirect if not logged in
+if (!Auth.getToken()) window.location.href = 'login.html';
+
+// Auth bar
+document.getElementById('usernameDisplay').textContent = Auth.getUsername() ?? '';
+document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout());
 
 const locationInput    = document.getElementById('locationInput');
 const searchBtn        = document.getElementById('searchBtn');
@@ -30,12 +35,11 @@ const statusEl      = document.getElementById('status');
 const toolbarEl     = document.getElementById('toolbar');
 const resultCountEl = document.getElementById('resultCount');
 const resultsEl     = document.getElementById('results');
-const downloadBtn   = document.getElementById('downloadBtn');
 const detailPanel   = document.getElementById('detailPanel');
 
-const mobileOverlay        = document.getElementById('mobileOverlay');
-const mobileOverlayContent = document.getElementById('mobileOverlayContent');
-const mobileOverlayClose   = document.getElementById('mobileOverlayClose');
+const mobileOverlay         = document.getElementById('mobileOverlay');
+const mobileOverlayContent  = document.getElementById('mobileOverlayContent');
+const mobileOverlayClose    = document.getElementById('mobileOverlayClose');
 const mobileOverlayBackdrop = document.getElementById('mobileOverlayBackdrop');
 
 function isMobile() {
@@ -164,6 +168,7 @@ async function search() {
       body: JSON.stringify(body),
     });
 
+    if (res.status === 401) { Auth.logout(); return; }
     if (!res.ok) throw new Error(`Erreur serveur (${res.status})`);
 
     const data = await res.json();
@@ -270,8 +275,11 @@ function selectProspect(index) {
 function renderDetail(s) {
   const phone   = s.phone   ?? null;
   const website = s.website ?? null;
-
   const notFound = '<span class="not-found">information non trouvée</span>';
+
+  const phoneHtml = phone
+    ? `<a href="tel:${escape(phone)}">${escape(phone)}</a>`
+    : notFound;
 
   const html = `
     <div class="detail-header">
@@ -293,7 +301,7 @@ function renderDetail(s) {
       </div>
       <div class="detail-field">
         <div class="detail-label">Téléphone</div>
-        <div class="detail-value">${phone ? escape(phone) : notFound}</div>
+        <div class="detail-value">${phoneHtml}</div>
       </div>
       <div class="detail-field">
         <div class="detail-label">Site web</div>
@@ -319,6 +327,8 @@ function renderDetail(s) {
     <a class="detail-maps-link" href="${s.googleMapsUrl}" target="_blank" rel="noopener">
       Voir sur Google Maps ↗
     </a>
+
+    <button class="btn-add-parcours" id="addParcoursBtn">+ Ajouter au parcours</button>
   `;
 
   if (isMobile()) {
@@ -327,7 +337,47 @@ function renderDetail(s) {
     detailPanel.classList.remove('hidden');
     detailPanel.innerHTML = html;
   }
+
+  // Attach after render (element now exists in DOM)
+  document.getElementById('addParcoursBtn')?.addEventListener('click', () => addToParcours(s));
 }
+
+// ─── Parcours ─────────────────────────────────────────────────────────────────
+
+async function addToParcours(prospect) {
+  const btn = document.getElementById('addParcoursBtn');
+  if (!btn || btn.classList.contains('btn-added')) return;
+  btn.disabled = true;
+  btn.textContent = 'Ajout...';
+
+  try {
+    const res = await fetch(`${API_URL}/parcours/add`, {
+      method: 'POST',
+      headers: Auth.authHeaders(),
+      body: JSON.stringify({
+        name: prospect.name,
+        address: prospect.address,
+        phone: prospect.phone,
+        score: prospect.score,
+        website: prospect.website,
+        rating: prospect.rating,
+        reviews: prospect.reviews,
+        google_maps_url: prospect.googleMapsUrl,
+      }),
+    });
+
+    if (res.status === 401) { Auth.logout(); return; }
+    if (!res.ok) throw new Error('Erreur serveur');
+
+    btn.textContent = 'Ajouté !';
+    btn.classList.add('btn-added');
+  } catch {
+    btn.disabled = false;
+    btn.textContent = '+ Ajouter au parcours';
+  }
+}
+
+// ─── Tags & utils ─────────────────────────────────────────────────────────────
 
 function scorePriority(score) {
   if (score >= 60) return 'high';
@@ -336,9 +386,10 @@ function scorePriority(score) {
 }
 
 function webTag(s) {
-  if (!s.website) return `<span class="tag no-site">Pas de site web</span>`;
-  if (s.platforms.length) return `<span class="tag platform">${s.platforms.join(', ')}</span>`;
-  return `<span class="tag has-site">Site propre</span>`;
+  if (!s.website) return `<span class="tag no-site">🔴 Pas de site</span>`;
+  if (s.isBadSite) return `<span class="tag bad-site">🟠 Site faible</span>`;
+  if (s.platforms?.length) return `<span class="tag platform">${s.platforms.join(', ')}</span>`;
+  return `<span class="tag has-site">🟢 Site propre</span>`;
 }
 
 function formatDistance(meters) {
@@ -362,38 +413,6 @@ function highlightMatch(text, query) {
     + escape(text.slice(idx + query.length));
 }
 
-// ─── CSV ──────────────────────────────────────────────────────────────────────
-
-function downloadCSV() {
-  if (!currentResults.length) return;
-
-  const headers = ['Nom', 'Adresse', 'Téléphone', 'Distance', 'Score', 'Note', 'Avis', 'Site web', 'Plateformes', 'Google Maps'];
-  const rows = currentResults.map((s) => [
-    s.name,
-    s.address,
-    s.phone ?? '',
-    s.distance != null ? formatDistance(s.distance) : '',
-    s.score,
-    s.rating ?? '',
-    s.reviews ?? '',
-    s.website ?? '',
-    (s.platforms ?? []).join(' / '),
-    s.googleMapsUrl,
-  ]);
-
-  const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `prospectly_${Date.now()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
 function setStatus(msg, isError = false) {
@@ -410,7 +429,6 @@ function clearStatus() {
 
 searchBtn.addEventListener('click', search);
 locationInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
-downloadBtn.addEventListener('click', downloadCSV);
 resetBtn.addEventListener('click', resetSearch);
 
 // ─── Autocomplete + History (Île-de-France priority) ─────────────────────────
