@@ -21,7 +21,7 @@ export async function verifyPassword(password, hash) {
 }
 
 export function signToken(userId, username) {
-  return jwt.sign({ sub: userId, username }, JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ sub: userId, username }, JWT_SECRET, { expiresIn: '365d' });
 }
 
 export function verifyToken(token) {
