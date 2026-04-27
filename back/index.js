@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import axios from 'axios';
 
 import db from './src/db.js';
 import { cacheGet, cacheSet } from './src/cacheManager.js';
@@ -10,11 +9,10 @@ import { analyzeWebsite } from './src/enrich.js';
 import { computeScore, sortResults } from './src/score.js';
 import { promisePool } from './src/pool.js';
 import { geocodeAddress } from './src/geocode.js';
-import { getPlaceDetails, haversineDistance, isFranchise } from './src/places.js';
+import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, expandKeywords } from './src/places.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const PLACES_BASE = 'https://maps.googleapis.com/maps/api/place';
 
 app.use(cors({
   origin: ['https://drams18.github.io', 'http://localhost:5173', 'http://localhost:3000'],
@@ -22,43 +20,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function nearbySearch(lat, lng, keyword, pageToken = null) {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  const params = { key: apiKey, language: 'fr' };
-
-  if (pageToken) {
-    params.pagetoken = pageToken;
-    await new Promise(r => setTimeout(r, 2000));
-  } else {
-    params.location = `${lat},${lng}`;
-    params.radius = 2000;
-    params.keyword = keyword;
-  }
-
-  const { data } = await axios.get(`${PLACES_BASE}/nearbysearch/json`, { params });
-  return {
-    results: data.results ?? [],
-    nextPageToken: data.next_page_token ?? null,
-  };
-}
-
-async function searchPlaces(lat, lng, keyword) {
-  const MAX = 50;
-  let all = [];
-  let { results, nextPageToken } = await nearbySearch(lat, lng, keyword);
-  all = all.concat(results);
-
-  while (nextPageToken && all.length < MAX) {
-    const next = await nearbySearch(lat, lng, keyword, nextPageToken);
-    all = all.concat(next.results);
-    nextPageToken = next.nextPageToken;
-  }
-
-  return all.slice(0, MAX);
-}
 
 // ─── Auth routes ──────────────────────────────────────────────────────────────
 
@@ -98,21 +59,35 @@ app.post('/auth/login', async (req, res) => {
 
 // ─── Search route ─────────────────────────────────────────────────────────────
 
+/**
+ * POST /search
+ * Body:
+ *   location  string   – human address or city (required)
+ *   lat/lng   number   – skip geocoding when provided
+ *   mode      string   – 'single' (default) | 'multi' | 'scan'
+ *   query     string   – free-form search term (mode=single)
+ *   keywords  string[] – explicit keyword list (mode=multi)
+ */
 app.post('/search', async (req, res) => {
-  const { location, lat, lng, query } = req.body ?? {};
+  const { location, lat, lng, query = '', keywords = [], mode = 'single' } = req.body ?? {};
 
   if (!location?.trim()) {
     return res.status(400).json({ error: 'location requis' });
   }
-
   if (!process.env.GOOGLE_MAPS_API_KEY) {
     return res.status(500).json({ error: 'GOOGLE_MAPS_API_KEY manquante dans .env' });
   }
+  if (mode === 'single' && !query.trim()) {
+    return res.status(400).json({ error: 'query requis pour le mode single' });
+  }
+  if (mode === 'multi' && (!Array.isArray(keywords) || keywords.length === 0)) {
+    return res.status(400).json({ error: 'keywords[] requis pour le mode multi' });
+  }
+  if (!['single', 'multi', 'scan'].includes(mode)) {
+    return res.status(400).json({ error: "mode doit être 'single', 'multi' ou 'scan'" });
+  }
 
   try {
-    const keyword = (typeof query === 'string' && query.trim()) ? query.trim() : 'barber';
-
-    // Geocode if no coordinates provided
     let searchLat = typeof lat === 'number' ? lat : null;
     let searchLng = typeof lng === 'number' ? lng : null;
     if (searchLat == null || searchLng == null) {
@@ -121,17 +96,29 @@ app.post('/search', async (req, res) => {
       searchLng = coords.lng;
     }
 
-    // Cache check
-    const cacheKey = `${searchLat.toFixed(4)}_${searchLng.toFixed(4)}_${keyword}`;
-    const cached = cacheGet(cacheKey);
-    if (cached) return res.json({ results: cached });
+    const radius = parseInt(process.env.SEARCH_RADIUS || '2000');
 
-    // Search places
-    const places = await searchPlaces(searchLat, searchLng, keyword);
-    const filtered = places.filter(p => !isFranchise(p.name ?? ''));
+    // Cache key encodes the full search intent
+    const cacheKeyParts = mode === 'scan'
+      ? ['scan']
+      : mode === 'multi'
+        ? ['multi', ...keywords.map(k => k.trim()).sort()]
+        : ['single', query.trim()];
+    const cacheKey = `${searchLat.toFixed(4)}_${searchLng.toFixed(4)}_${cacheKeyParts.join('_')}`;
+
+    const cached = cacheGet(cacheKey);
+    if (cached) {
+      return res.json({ results: cached, meta: cached.__meta ?? null });
+    }
+
+    // Collect raw places (deduplicated by place_id)
+    const rawPlaces = await searchPlaces({ lat: searchLat, lng: searchLng, radius, query, keywords, mode });
+    const filtered = rawPlaces.filter(p => !isFranchise(p.name ?? ''));
+
+    const maxResults = parseInt(process.env.MAX_RESULTS || '60');
 
     // Parallel enrichment (max 5 concurrent)
-    const tasks = filtered.map(place => async () => {
+    const tasks = filtered.slice(0, maxResults).map(place => async () => {
       try {
         const details = await getPlaceDetails(place.place_id);
         if (!details) return null;
@@ -144,7 +131,7 @@ app.post('/search', async (req, res) => {
           ? haversineDistance(searchLat, searchLng, placeLat, placeLng)
           : null;
 
-        const salon = {
+        const lead = {
           name: details.name ?? place.name,
           address: details.formatted_address ?? place.vicinity ?? '',
           phone: details.formatted_phone_number ?? null,
@@ -158,7 +145,7 @@ app.post('/search', async (req, res) => {
           distance,
         };
 
-        return { ...salon, score: computeScore(salon) };
+        return { ...lead, score: computeScore(lead) };
       } catch {
         return null;
       }
@@ -167,8 +154,16 @@ app.post('/search', async (req, res) => {
     const enriched = (await promisePool(tasks, 5)).filter(Boolean);
     const sorted = sortResults(enriched);
 
+    const meta = {
+      mode,
+      total: sorted.length,
+      ...(mode === 'scan' && { niches: SCAN_NICHES }),
+      ...(mode === 'single' && { keywords: expandKeywords(query) }),
+      ...(mode === 'multi' && { keywords }),
+    };
+
     cacheSet(cacheKey, sorted);
-    res.json({ results: sorted });
+    res.json({ results: sorted, meta });
   } catch (err) {
     console.error('[/search]', err.message);
     res.status(500).json({ error: err.message });
