@@ -7,10 +7,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout
 
 const locationInput    = document.getElementById('locationInput');
 const searchBtn        = document.getElementById('searchBtn');
-const resetBtn         = document.getElementById('resetBtn');
-const filterErrorEl    = document.getElementById('filterError');
 const queryInput = document.getElementById('queryInput');
-const scanBtn = document.getElementById('scanBtn');
 
 const statusEl      = document.getElementById('status');
 const toolbarEl     = document.getElementById('toolbar');
@@ -51,8 +48,6 @@ let selectedIndex    = null;
 let searchLat        = null;
 let searchLng        = null;
 let acDebounce       = null;
-let currentPage      = 1;
-const PAGE_SIZE      = 10;
 let parcoursSet      = new Set();
 
 // ─── Parcours set (in-memory, loaded at startup) ──────────────────────────────
@@ -107,38 +102,18 @@ function removeFromHistory(location) {
   ));
 }
 
-// ─── Reset ────────────────────────────────────────────────────────────────────
-
-function resetSearch() {
-  filtersLocked = false;
-  queryInput.value = '';
-  filtersContainer.classList.remove('locked');
-  resetBtn.classList.add('hidden');
-  filterErrorEl.classList.add('hidden');
-  currentResults = [];
-  displayedResults = [];
-  resultsEl.innerHTML = '';
-  detailPanel.classList.add('hidden');
-  closeMobileOverlay();
-  toolbarEl.classList.add('hidden');
-  selectedIndex = null;
-  clearStatus();
-}
-
 // ─── Search ───────────────────────────────────────────────────────────────────
+
+function updateSearchButtonState() {
+  const location = locationInput.value.trim();
+  const query = queryInput.value.trim();
+  searchBtn.disabled = !location || !query;
+}
 
 async function search() {
   const location = locationInput.value.trim();
-  if (!location) return;
-
-const query = queryInput.value.trim();
-
-  if (!query) {
-    filterErrorEl.textContent = 'Veuillez entrer un type de business';
-    filterErrorEl.classList.remove('hidden');
-    return;
-  }
-  filterErrorEl.classList.add('hidden');
+  const query = queryInput.value.trim();
+  if (!location || !query) return;
 
   setStatus('Recherche en cours…');
   searchBtn.disabled = true;
@@ -148,7 +123,6 @@ const query = queryInput.value.trim();
   selectedIndex = null;
   displayedResults = [];
   currentResults = [];
-  currentPage = 1;
   toolbarEl.classList.add('hidden');
 
   try {
@@ -176,13 +150,8 @@ const query = queryInput.value.trim();
     console.error('[Prospectly] Erreur API /search :', err);
     setStatus(`Erreur : ${err.message}`, true);
   } finally {
-    searchBtn.disabled = false;
+    updateSearchButtonState();
   }
-}
-
-function loadMore() {
-  currentPage += 1;
-  renderResults();
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -194,8 +163,7 @@ function renderResults() {
   }
 
   const seen = loadSeen();
-  displayedResults = currentResults.slice(0, currentPage * PAGE_SIZE);
-  const hasMore = displayedResults.length < currentResults.length;
+  displayedResults = currentResults;
 
   resultCountEl.textContent = `${currentResults.length} prospect${currentResults.length > 1 ? 's' : ''} trouvé${currentResults.length > 1 ? 's' : ''}`;
   toolbarEl.classList.remove('hidden');
@@ -221,14 +189,7 @@ function renderResults() {
     `;
   }).join('');
 
-  const loadMoreHtml = hasMore
-    ? `<button id="loadMoreBtn" class="load-more-btn">Voir plus de résultats</button>`
-    : '';
-
-  resultsEl.innerHTML = cards + loadMoreHtml;
-
-  const loadMoreBtn = document.getElementById('loadMoreBtn');
-  if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMore);
+  resultsEl.innerHTML = cards;
 
   resultsEl.addEventListener('click', handleCardClick, { once: false });
 }
@@ -430,7 +391,10 @@ function clearStatus() {
 
 searchBtn.addEventListener('click', search);
 locationInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
-resetBtn.addEventListener('click', resetSearch);
+queryInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+locationInput.addEventListener('input', updateSearchButtonState);
+queryInput.addEventListener('input', updateSearchButtonState);
+updateSearchButtonState();
 
 // ─── Autocomplete + History (Île-de-France priority) ─────────────────────────
 
@@ -582,33 +546,3 @@ function initAutocomplete() {
     if (!e.target.closest('.input-wrapper')) hideDropdown();
   });
 }
-
-scanBtn.addEventListener('click', async () => {
-  const location = locationInput.value.trim();
-  if (!location) return;
-
-  setStatus('Scan en cours…');
-  searchBtn.disabled = true;
-
-  try {
-    const res = await fetch(`${API_URL}/search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location,
-        mode: 'scan'
-      }),
-    });
-
-    if (res.status === 401) { Auth.logout(); return; }
-
-    const data = await res.json();
-    currentResults = data.results ?? [];
-    renderResults();
-    clearStatus();
-  } catch (err) {
-    setStatus('Erreur scan', true);
-  } finally {
-    searchBtn.disabled = false;
-  }
-});

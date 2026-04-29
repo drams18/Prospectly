@@ -28,15 +28,42 @@ export function computeScore(salon) {
   return Math.min(score, 100);
 }
 
+function hasIncompleteData(lead) {
+  return !lead.name || !lead.address || !lead.phone;
+}
+
+function hasMissingOrBrokenWebsite(lead) {
+  if (!lead.website) return true;
+  const reasons = lead.badSiteReasons ?? [];
+  return reasons.includes('Unreachable') || reasons.includes('HTTP error') || reasons.includes('Coming soon');
+}
+
+export function getLeadPriority(lead) {
+  // High priority: no usable website presence or incomplete business data.
+  if (hasMissingOrBrokenWebsite(lead) || !lead.googleMapsUrl || hasIncompleteData(lead)) {
+    return 0;
+  }
+
+  // Medium priority: website exists but quality signals are weak.
+  if (lead.isBadSite || (lead.platforms?.length ?? 0) > 0) {
+    return 1;
+  }
+
+  // Low priority: complete profile and website quality looks acceptable.
+  return 2;
+}
+
 export function sortResults(results) {
   return [...results].sort((a, b) => {
-    // 1. Sans site en premier
-    const aNo = !a.website ? 0 : 1;
-    const bNo = !b.website ? 0 : 1;
-    if (aNo !== bNo) return aNo - bNo;
-    // 2. Score décroissant
+    // 1) Smart commercial priority first.
+    const byPriority = getLeadPriority(a) - getLeadPriority(b);
+    if (byPriority !== 0) return byPriority;
+
+    // 2) Then sort by best commercial opportunity.
     if (b.score !== a.score) return b.score - a.score;
-    // 3. Distance croissante
+    if ((b.reviews ?? 0) !== (a.reviews ?? 0)) return (b.reviews ?? 0) - (a.reviews ?? 0);
+
+    // 3) Finally nearest first.
     return (a.distance ?? Infinity) - (b.distance ?? Infinity);
   });
 }

@@ -115,10 +115,8 @@ app.post('/search', async (req, res) => {
     const rawPlaces = await searchPlaces({ lat: searchLat, lng: searchLng, radius, query, keywords, mode });
     const filtered = rawPlaces.filter(p => !isFranchise(p.name ?? ''));
 
-    const maxResults = parseInt(process.env.MAX_RESULTS || '60');
-
     // Parallel enrichment (max 5 concurrent)
-    const tasks = filtered.slice(0, maxResults).map(place => async () => {
+    const tasks = filtered.map(place => async () => {
       try {
         const details = await getPlaceDetails(place.place_id);
         if (!details) return null;

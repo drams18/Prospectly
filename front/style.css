@@ -128,6 +128,11 @@ header p {
   position: relative;
 }
 
+.query-input {
+  flex: 1;
+  min-width: 220px;
+}
+
 .search-bar input {
   width: 100%;
   padding: 11px 16px;
