@@ -14,12 +14,11 @@ import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NIC
 const app = express();
 const PORT = process.env.PORT || 3001;
 const PLACES_PHOTO_ENDPOINT = 'https://maps.googleapis.com/maps/api/place/photo';
-const FALLBACK_PLACE_IMAGE = 'https://placehold.co/800x450/f1f5f9/64748b?text=Prospectly+Business';
 
 function buildGooglePlacePhotoUrl(photoReference) {
-  if (!photoReference) return FALLBACK_PLACE_IMAGE;
+  if (!photoReference) return null;
   const photoParams = new URLSearchParams({
-    maxwidth: '800',
+    maxwidth: '1200',
     photoreference: photoReference,
     key: process.env.GOOGLE_MAPS_API_KEY,
   });
@@ -158,7 +157,11 @@ app.post('/search', async (req, res) => {
           ? haversineDistance(searchLat, searchLng, placeLat, placeLng)
           : null;
 
-        const photoReference = details.photos?.[0]?.photo_reference ?? place.photos?.[0]?.photo_reference ?? null;
+        const photo =
+          details.photos?.[0] ||
+          place.photos?.[0] ||
+          null;
+        const photoReference = photo?.photo_reference ?? null;
         const lead = {
           name: details.name ?? place.name,
           address: details.formatted_address ?? place.vicinity ?? '',
