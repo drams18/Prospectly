@@ -79,7 +79,8 @@ app.post('/search', async (req, res) => {
     keywords = [],
     mode = 'single',
   } = req.body ?? {};
-  const effectiveType = (businessType || query || '').trim();
+  const normalizedBusinessType = businessType.trim().toLowerCase();
+  const effectiveType = (normalizedBusinessType || query || '').trim();
 
   if (!location?.trim()) {
     return res.status(400).json({ error: 'location requis' });
@@ -111,7 +112,7 @@ app.post('/search', async (req, res) => {
       ? ['scan']
       : mode === 'multi'
         ? ['multi', ...keywords.map(k => k.trim()).sort()]
-        : ['single'];
+        : ['single', normalizedBusinessType || 'all'];
     const cacheKey = `${searchLat.toFixed(4)}_${searchLng.toFixed(4)}_${cacheKeyParts.join('_')}`;
 
     const cached = cacheGet(cacheKey);
@@ -127,6 +128,7 @@ app.post('/search', async (req, res) => {
       keywords,
       mode,
       locationText: location.trim(),
+      businessType: normalizedBusinessType,
     });
     const filtered = rawPlaces.filter(p => !isFranchise(p.name ?? ''));
 

@@ -26,6 +26,15 @@ export const TYPE_FILTER_MAP = {
   boutique: ['store'],
 };
 
+export const TYPE_MAP = {
+  restaurant: 'restaurant',
+  coiffeur: 'hair_care',
+  garage: 'car_repair',
+  hotel: 'lodging',
+  cafe: 'cafe',
+  boutique: 'store',
+};
+
 export const SCAN_NICHES = Object.keys(KEYWORD_MAP);
 
 const FRANCHISE_BLACKLIST = [
@@ -47,6 +56,8 @@ export function expandKeywords(query) {
 export function resolveGooglePlaceType(typeInput = '') {
   const normalized = typeInput.trim().toLowerCase();
   if (!normalized) return null;
+
+  if (TYPE_MAP[normalized]) return TYPE_MAP[normalized];
 
   const byFilterMap = TYPE_FILTER_MAP[normalized];
   if (byFilterMap?.length) return byFilterMap[0];
@@ -78,8 +89,9 @@ export function computeAdaptiveRadii(locationText = '', fallbackRadius = 2000) {
   return [...new Set([radius, secondary, 3000])].sort((a, b) => a - b);
 }
 
-export async function searchPlaces({ lat, lng, radius, query = '', keywords = [], mode = 'single', locationText = '' }) {
+export async function searchPlaces({ lat, lng, radius, query = '', keywords = [], mode = 'single', locationText = '', businessType = '' }) {
   let searchTerms;
+  const resolvedPlaceType = resolveGooglePlaceType(businessType || query || '');
 
   if (mode === 'single') {
     searchTerms = [];
@@ -96,7 +108,13 @@ export async function searchPlaces({ lat, lng, radius, query = '', keywords = []
 
   for (const kw of (searchTerms.length ? searchTerms : [null])) {
     for (const currentRadius of radii) {
-      tasks.push(() => nearbySearch({ lat, lng, radius: currentRadius, keyword: kw }));
+      tasks.push(() => nearbySearch({
+        lat,
+        lng,
+        radius: currentRadius,
+        keyword: kw,
+        placeType: resolvedPlaceType,
+      }));
     }
   }
 
@@ -112,6 +130,12 @@ export async function searchPlaces({ lat, lng, radius, query = '', keywords = []
   const allPlaces = [...seen.values()];
 
   let filtered = allPlaces;
+  if (resolvedPlaceType) {
+    filtered = filtered.filter(place =>
+      Array.isArray(place.types) && place.types.includes(resolvedPlaceType)
+    );
+  }
+
   if (mode !== 'single') {
     const typeFilters = TYPE_FILTER_MAP[query?.toLowerCase()] || [];
     if (typeFilters.length) {
@@ -139,7 +163,7 @@ export async function searchPlaces({ lat, lng, radius, query = '', keywords = []
   return filtered;
 }
 
-async function nearbySearch({ lat, lng, radius, keyword }) {
+async function nearbySearch({ lat, lng, radius, keyword, placeType }) {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   const results = [];
   let pageToken = null;
@@ -153,6 +177,7 @@ async function nearbySearch({ lat, lng, radius, keyword }) {
     };
 
     if (keyword) params.keyword = keyword;
+    if (placeType) params.type = placeType;
 
     if (pageToken) {
       params.pagetoken = pageToken;
