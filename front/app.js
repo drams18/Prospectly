@@ -56,6 +56,7 @@ let searchLat        = null;
 let searchLng        = null;
 let acDebounce       = null;
 let parcoursSet      = new Set();
+const FALLBACK_PLACE_IMAGE = 'https://placehold.co/800x450/f1f5f9/64748b?text=Prospectly+Business';
 
 // ─── Parcours set (in-memory, loaded at startup) ──────────────────────────────
 
@@ -176,11 +177,19 @@ function renderResults() {
 
   const cards = displayedResults.map((s, i) => {
     const isSeen = seen.has(seenKey(s));
+    const imageUrl = escape(s.imageUrl || FALLBACK_PLACE_IMAGE);
+    const actionLabel = 'Voir details';
     return `
       <div class="card${isSeen ? ' seen' : ''}" data-index="${i}">
-        <div class="score-badge ${scorePriority(s.score)}">${s.score}</div>
+        <div class="card-cover loading">
+          <img class="card-image" src="${imageUrl}" alt="${escape(s.name)}" loading="lazy" decoding="async" />
+          <div class="card-cover-gradient"></div>
+          <div class="card-cover-content">
+            <div class="score-badge ${scorePriority(s.score)}">${s.score}</div>
+            <div class="card-cover-title">${escape(s.name)}</div>
+          </div>
+        </div>
         <div class="card-body">
-          <div class="card-name">${escape(s.name)}</div>
           <div class="card-address">${escape(s.address)}</div>
           <div class="card-meta">
             ${isSeen ? '<span class="badge-seen">Déjà vue</span>' : ''}
@@ -190,12 +199,36 @@ function renderResults() {
             ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
           </div>
         </div>
-        <button class="detail-btn" title="Voir le détail">👁</button>
+        <button class="detail-btn" title="${actionLabel}">${actionLabel}</button>
       </div>
     `;
   }).join('');
 
   resultsEl.innerHTML = cards;
+  resultsEl.querySelectorAll('.card-image').forEach((img) => {
+    const cover = img.closest('.card-cover');
+    if (!cover) return;
+
+    const onLoad = () => {
+      cover.classList.remove('loading');
+      cover.classList.add('loaded');
+    };
+
+    const onError = () => {
+      if (!img.dataset.fallbackApplied) {
+        img.dataset.fallbackApplied = '1';
+        img.src = FALLBACK_PLACE_IMAGE;
+        return;
+      }
+      onLoad();
+    };
+
+    if (img.complete && img.naturalWidth > 0) onLoad();
+    else {
+      img.addEventListener('load', onLoad, { once: true });
+      img.addEventListener('error', onError, { once: true });
+    }
+  });
 
   resultsEl.addEventListener('click', handleCardClick, { once: false });
 }

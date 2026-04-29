@@ -13,6 +13,18 @@ import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NIC
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const PLACES_PHOTO_ENDPOINT = 'https://maps.googleapis.com/maps/api/place/photo';
+const FALLBACK_PLACE_IMAGE = 'https://placehold.co/800x450/f1f5f9/64748b?text=Prospectly+Business';
+
+function buildGooglePlacePhotoUrl(photoReference) {
+  if (!photoReference) return FALLBACK_PLACE_IMAGE;
+  const photoParams = new URLSearchParams({
+    maxwidth: '800',
+    photoreference: photoReference,
+    key: process.env.GOOGLE_MAPS_API_KEY,
+  });
+  return `${PLACES_PHOTO_ENDPOINT}?${photoParams.toString()}`;
+}
 
 app.use(cors({
   origin: ['https://drams18.github.io', 'http://localhost:5173', 'http://localhost:3000'],
@@ -146,6 +158,7 @@ app.post('/search', async (req, res) => {
           ? haversineDistance(searchLat, searchLng, placeLat, placeLng)
           : null;
 
+        const photoReference = details.photos?.[0]?.photo_reference ?? place.photos?.[0]?.photo_reference ?? null;
         const lead = {
           name: details.name ?? place.name,
           address: details.formatted_address ?? place.vicinity ?? '',
@@ -157,6 +170,7 @@ app.post('/search', async (req, res) => {
           isBadSite: webInfo.isBadSite,
           badSiteReasons: webInfo.badSiteReasons,
           googleMapsUrl: details.url ?? `https://maps.google.com/?q=${encodeURIComponent(details.name ?? place.name)}`,
+          imageUrl: buildGooglePlacePhotoUrl(photoReference),
           distance,
         };
 

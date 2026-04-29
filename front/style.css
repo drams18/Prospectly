@@ -318,34 +318,89 @@ header p {
 /* ── Cards ──────────────────────────────────────────────────────────────────── */
 .card {
   background: var(--surface);
-  border-radius: var(--radius-lg);
-  padding: 14px 16px;
-  margin-bottom: 8px;
+  border-radius: 16px;
+  margin-bottom: 12px;
+  overflow: hidden;
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  box-shadow: var(--shadow-sm);
+  flex-direction: column;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
   cursor: pointer;
-  transition: box-shadow 0.2s, border-color 0.15s, transform 0.15s;
+  transition: box-shadow 0.25s, border-color 0.2s, transform 0.2s;
   border: 1.5px solid var(--border);
 }
 
 .card:hover {
-  box-shadow: var(--shadow);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.14);
   border-color: var(--border-strong);
-  transform: translateY(-1px);
+  transform: scale(1.02);
 }
 
 .card.selected {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1), var(--shadow);
-  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12), 0 16px 28px rgba(15, 23, 42, 0.16);
+  transform: scale(1.01);
+}
+
+.card-cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  position: relative;
+  background: linear-gradient(120deg, #e2e8f0 8%, #f8fafc 18%, #e2e8f0 33%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.card-cover.loading .card-image {
+  opacity: 0;
+}
+
+.card-cover.loaded {
+  animation: none;
+  background: #e2e8f0;
+}
+
+.card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity 0.2s ease, transform 0.3s ease;
+}
+
+.card:hover .card-image {
+  transform: scale(1.03);
+}
+
+.card-cover-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.72) 0%, rgba(15, 23, 42, 0.15) 46%, rgba(15, 23, 42, 0) 100%);
+  pointer-events: none;
+}
+
+.card-cover-content {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-cover-title {
+  color: #fff;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 /* ── Score badge ────────────────────────────────────────────────────────────── */
 .score-badge {
-  min-width: 48px;
-  height: 48px;
+  min-width: 46px;
+  height: 46px;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -360,7 +415,8 @@ header p {
 .score-badge.low    { background: var(--danger-bg);  color: var(--danger-text); }
 
 .card-body {
-  flex: 1;
+  width: 100%;
+  padding: 12px 14px 14px;
   min-width: 0;
 }
 
@@ -372,9 +428,9 @@ header p {
 }
 
 .card-address {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -389,16 +445,19 @@ header p {
 
 /* ── Detail button ──────────────────────────────────────────────────────────── */
 .detail-btn {
-  background: none;
+  background: #fff;
   border: 1.5px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 8px;
-  font-size: 0.8rem;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   font-family: inherit;
   cursor: pointer;
   color: var(--text-secondary);
-  flex-shrink: 0;
-  align-self: center;
+  width: 100%;
+  margin-top: 10px;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
@@ -406,6 +465,11 @@ header p {
   background: var(--primary-light);
   border-color: var(--primary);
   color: var(--primary);
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 
 /* ── Tags ───────────────────────────────────────────────────────────────────── */

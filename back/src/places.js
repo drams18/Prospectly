@@ -208,7 +208,8 @@ export async function getPlaceDetails(placeId) {
     'geometry',
     'business_status',
     'types',
-    'url'
+    'url',
+    'photos'
   ].join(',');
 
   const { data } = await axios.get(`${PLACES_BASE}/details/json`, {
