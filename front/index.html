@@ -47,6 +47,24 @@
     </datalist>
     <button id="searchBtn" disabled>Rechercher</button>
   </div>
+  <div class="filters-row">
+    <label class="filter-inline">
+      <input type="checkbox" id="filterNoWebsite" />
+      Sans site
+    </label>
+    <label class="filter-inline">
+      Note min
+      <input type="number" id="filterMinRating" min="0" max="5" step="0.1" placeholder="0" />
+    </label>
+    <label class="filter-inline">
+      Score min
+      <input type="number" id="filterMinScore" min="0" max="100" step="1" placeholder="0" />
+    </label>
+    <label class="filter-inline">
+      Catégorie
+      <input type="text" id="filterCategory" placeholder="coiffeur, restaurant..." />
+    </label>
+  </div>
 </div>
 
     <div id="status" class="status hidden"></div>

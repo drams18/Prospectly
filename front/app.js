@@ -26,6 +26,10 @@ const mobileOverlay         = document.getElementById('mobileOverlay');
 const mobileOverlayContent  = document.getElementById('mobileOverlayContent');
 const mobileOverlayClose    = document.getElementById('mobileOverlayClose');
 const mobileOverlayBackdrop = document.getElementById('mobileOverlayBackdrop');
+const filterNoWebsite = document.getElementById('filterNoWebsite');
+const filterMinRating = document.getElementById('filterMinRating');
+const filterCategory = document.getElementById('filterCategory');
+const filterMinScore = document.getElementById('filterMinScore');
 
 function isMobile() {
   return window.innerWidth <= 640;
@@ -56,6 +60,8 @@ let searchLat        = null;
 let searchLng        = null;
 let acDebounce       = null;
 let parcoursSet      = new Set();
+const QUICK_SMS_SCRIPT = "Bonjour, j'ai remarque que vous n'avez pas de site web. Je peux vous en creer un simple pour attirer plus de clients.";
+const QUICK_CALL_SCRIPT = "Bonjour, je fais des sites web pour les commerces locaux, j'ai vu que vous n'avez pas de site. Je peux vous proposer une solution simple pour attirer plus de clients.";
 const FALLBACK_PLACE_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
     <rect width="800" height="450" fill="#f1f5f9"/>
@@ -177,9 +183,15 @@ function renderResults() {
   }
 
   const seen = loadSeen();
-  displayedResults = currentResults;
+  displayedResults = applyFilters(currentResults);
+  if (!displayedResults.length) {
+    resultCountEl.textContent = '0 prospect trouve';
+    toolbarEl.classList.remove('hidden');
+    resultsEl.innerHTML = '<p class="empty-state">Aucun prospect avec ces filtres.</p>';
+    return;
+  }
 
-  resultCountEl.textContent = `${currentResults.length} prospect${currentResults.length > 1 ? 's' : ''} trouvé${currentResults.length > 1 ? 's' : ''}`;
+  resultCountEl.textContent = `${displayedResults.length} prospect${displayedResults.length > 1 ? 's' : ''} trouve${displayedResults.length > 1 ? 's' : ''}`;
   toolbarEl.classList.remove('hidden');
 
   const cards = displayedResults.map((s, i) => {
@@ -197,6 +209,10 @@ function renderResults() {
           </div>
         </div>
         <div class="card-body">
+          <div class="card-status-line">
+            <span class="tag score-label ${s.scoreLabel || 'low'}">${scoreLabelText(s.scoreLabel)}</span>
+            <span class="tag web-health ${siteHealthClass(s)}">${siteHealthText(s)}</span>
+          </div>
           <div class="card-address">${escape(s.address)}</div>
           <div class="card-meta">
             ${isSeen ? '<span class="badge-seen">Déjà vue</span>' : ''}
@@ -204,6 +220,12 @@ function renderResults() {
             ${s.rating ? `<span class="tag rating">★ ${s.rating}</span>` : ''}
             ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
             ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
+          </div>
+          <div class="card-actions">
+            ${s.phone ? `<a class="quick-btn" href="tel:${escape(s.phone)}">Appeler</a>` : ''}
+            <button class="quick-btn secondary" data-quick="copy-phone" data-index="${i}">Copier numero</button>
+            <button class="quick-btn secondary" data-quick="copy-msg" data-index="${i}">Copier message</button>
+            <a class="quick-btn secondary" href="${escape(s.googleMapsUrl)}" target="_blank" rel="noopener">Maps</a>
           </div>
         </div>
         <button class="detail-btn" title="${actionLabel}">${actionLabel}</button>
@@ -241,6 +263,20 @@ function renderResults() {
 }
 
 function handleCardClick(e) {
+  const quickTarget = e.target.closest('[data-quick]');
+  if (quickTarget) {
+    const idx = parseInt(quickTarget.dataset.index, 10);
+    const prospect = displayedResults[idx];
+    if (!prospect) return;
+    if (quickTarget.dataset.quick === 'copy-phone') {
+      copyToClipboard(prospect.phone || '');
+      return;
+    }
+    if (quickTarget.dataset.quick === 'copy-msg') {
+      copyToClipboard(buildSmsMessage(prospect));
+      return;
+    }
+  }
   const card = e.target.closest('.card');
   if (!card) return;
   const index = parseInt(card.dataset.index, 10);
@@ -322,9 +358,31 @@ function renderDetail(s) {
 
     <div class="detail-meta">
       ${webTag(s)}
+      <span class="tag web-health ${siteHealthClass(s)}">${siteHealthText(s)}</span>
       ${s.rating  ? `<span class="tag rating">★ ${s.rating}</span>`     : ''}
       ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
       ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
+    </div>
+
+    <div class="detail-actions">
+      ${phone ? `<a class="quick-btn" href="tel:${escape(phone)}">Appeler</a>` : ''}
+      <button class="quick-btn secondary" id="copyPhoneBtn">Copier numero</button>
+      <button class="quick-btn secondary" id="copySmsBtn">Copier message</button>
+      <a class="quick-btn secondary" href="${escape(s.googleMapsUrl)}" target="_blank" rel="noopener">Maps</a>
+    </div>
+
+    <div class="scripts-box">
+      <div class="scripts-title">Scripts rapides</div>
+      <div class="scripts-item">
+        <div class="scripts-label">Appel</div>
+        <p>${escape(QUICK_CALL_SCRIPT)}</p>
+        <button class="quick-btn secondary" id="copyCallScriptBtn">Copier</button>
+      </div>
+      <div class="scripts-item">
+        <div class="scripts-label">SMS</div>
+        <p>${escape(QUICK_SMS_SCRIPT)}</p>
+        <button class="quick-btn secondary" id="copySmsScriptBtn">Copier</button>
+      </div>
     </div>
 
     <a class="detail-maps-link" href="${s.googleMapsUrl}" target="_blank" rel="noopener">
@@ -335,6 +393,7 @@ function renderDetail(s) {
       ? `<button class="btn-add-parcours btn-added" id="addParcoursBtn" disabled>Déjà dans le parcours</button>`
       : `<button class="btn-add-parcours" id="addParcoursBtn">+ Ajouter au parcours</button>`
     }
+    <button class="btn-add-parcours" id="addTourBtn">+ Ajouter a la tournee</button>
   `;
 
   if (isMobile()) {
@@ -346,6 +405,11 @@ function renderDetail(s) {
 
   // Attach after render (element now exists in DOM)
   document.getElementById('addParcoursBtn')?.addEventListener('click', () => addToParcours(s));
+  document.getElementById('addTourBtn')?.addEventListener('click', () => addToTour(s));
+  document.getElementById('copyPhoneBtn')?.addEventListener('click', () => copyToClipboard(s.phone || ''));
+  document.getElementById('copySmsBtn')?.addEventListener('click', () => copyToClipboard(buildSmsMessage(s)));
+  document.getElementById('copyCallScriptBtn')?.addEventListener('click', () => copyToClipboard(QUICK_CALL_SCRIPT));
+  document.getElementById('copySmsScriptBtn')?.addEventListener('click', () => copyToClipboard(QUICK_SMS_SCRIPT));
 }
 
 // ─── Parcours ─────────────────────────────────────────────────────────────────
@@ -369,6 +433,9 @@ async function addToParcours(prospect) {
         rating: prospect.rating,
         reviews: prospect.reviews,
         google_maps_url: prospect.googleMapsUrl,
+        in_tour: 0,
+        notes: '',
+        visit_status: 'pending',
       }),
     });
 
@@ -385,6 +452,33 @@ async function addToParcours(prospect) {
   }
 }
 
+async function addToTour(prospect) {
+  try {
+    const res = await fetch(`${API_URL}/parcours/add`, {
+      method: 'POST',
+      headers: Auth.authHeaders(),
+      body: JSON.stringify({
+        name: prospect.name,
+        address: prospect.address,
+        phone: prospect.phone,
+        score: prospect.score,
+        website: prospect.website,
+        rating: prospect.rating,
+        reviews: prospect.reviews,
+        google_maps_url: prospect.googleMapsUrl,
+        in_tour: 1,
+        visit_status: 'pending',
+      }),
+    });
+    if (res.status === 401) { Auth.logout(); return; }
+    if (!res.ok) throw new Error('Erreur serveur');
+    setStatus('Ajoute a la tournee');
+    setTimeout(clearStatus, 1000);
+  } catch {
+    setStatus('Impossible d ajouter a la tournee', true);
+  }
+}
+
 // ─── Tags & utils ─────────────────────────────────────────────────────────────
 
 function scorePriority(score) {
@@ -395,7 +489,8 @@ function scorePriority(score) {
 
 function webTag(s) {
   if (!s.website) return `<span class="tag no-site">🔴 Pas de site</span>`;
-  if (s.isBadSite) return `<span class="tag bad-site">🟠 Site faible</span>`;
+  if (s.siteHealth === 'weak' || s.isBadSite) return `<span class="tag bad-site">🟠 Site faible</span>`;
+  if (s.siteHealth === 'improvable') return `<span class="tag platform">⚠️ Site a ameliorer</span>`;
   if (s.platforms?.length) return `<span class="tag platform">${s.platforms.join(', ')}</span>`;
   return `<span class="tag has-site">🟢 Site propre</span>`;
 }
@@ -403,6 +498,57 @@ function webTag(s) {
 function formatDistance(meters) {
   if (meters < 1000) return `${meters} m`;
   return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function scoreLabelText(label) {
+  if (label === 'opportunity') return 'Opportunite';
+  if (label === 'medium') return 'Moyen';
+  return 'Faible';
+}
+
+function siteHealthText(s) {
+  if (!s.website) return 'Pas de site';
+  if (s.siteHealth === 'weak' || s.isBadSite) return 'Site faible';
+  if (s.siteHealth === 'improvable') return 'Site a ameliorer';
+  return 'OK';
+}
+
+function siteHealthClass(s) {
+  if (!s.website) return 'weak';
+  if (s.siteHealth === 'weak' || s.isBadSite) return 'weak';
+  if (s.siteHealth === 'improvable') return 'improvable';
+  return 'correct';
+}
+
+function applyFilters(results) {
+  const noWebsiteOnly = filterNoWebsite?.checked;
+  const minRating = Number(filterMinRating?.value || 0);
+  const minScore = Number(filterMinScore?.value || 0);
+  const category = (filterCategory?.value || '').trim().toLowerCase();
+
+  return results.filter((item) => {
+    if (noWebsiteOnly && item.website) return false;
+    if (minRating > 0 && (item.rating ?? 0) < minRating) return false;
+    if (minScore > 0 && (item.score ?? 0) < minScore) return false;
+    if (category && !item.name.toLowerCase().includes(category)) return false;
+    return true;
+  });
+}
+
+function buildSmsMessage(prospect) {
+  if (!prospect?.name) return QUICK_SMS_SCRIPT;
+  return `Bonjour, j'ai remarque que ${prospect.name} n'a pas de site web moderne. Je peux vous en creer un simple pour attirer plus de clients.`;
+}
+
+async function copyToClipboard(text) {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus('Copie dans le presse-papiers');
+    setTimeout(clearStatus, 1000);
+  } catch {
+    setStatus('Impossible de copier', true);
+  }
 }
 
 function escape(str) {
@@ -442,6 +588,10 @@ locationInput.addEventListener('input', updateSearchButtonState);
 queryInput.addEventListener('input', updateSearchButtonState);
 queryInput.setAttribute('list', 'businessTypeSuggestions');
 updateSearchButtonState();
+filterNoWebsite?.addEventListener('change', renderResults);
+filterMinRating?.addEventListener('input', renderResults);
+filterMinScore?.addEventListener('input', renderResults);
+filterCategory?.addEventListener('input', renderResults);
 
 // ─── Autocomplete + History (Île-de-France priority) ─────────────────────────
 

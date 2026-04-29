@@ -6,7 +6,7 @@ import db from './src/db.js';
 import { cacheGet, cacheSet } from './src/cacheManager.js';
 import { hashPassword, verifyPassword, signToken, requireAuth, findUserByUsername, createUser } from './src/auth.js';
 import { analyzeWebsite } from './src/enrich.js';
-import { computeScore, sortResults } from './src/score.js';
+import { computeScore, getScoreLabel, sortResults } from './src/score.js';
 import { promisePool } from './src/pool.js';
 import { geocodeAddress } from './src/geocode.js';
 import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, computeAdaptiveRadii } from './src/places.js';
@@ -172,12 +172,20 @@ app.post('/search', async (req, res) => {
           platforms: webInfo.platforms,
           isBadSite: webInfo.isBadSite,
           badSiteReasons: webInfo.badSiteReasons,
+          siteHealth: webInfo.siteHealth,
+          siteQuality: webInfo.siteQuality,
+          responseTime: webInfo.responseTime,
+          hasHttps: webInfo.hasHttps,
+          hasMetaTitle: webInfo.hasMetaTitle,
+          hasViewport: webInfo.hasViewport,
+          mobileReachable: webInfo.mobileReachable,
           googleMapsUrl: details.url ?? `https://maps.google.com/?q=${encodeURIComponent(details.name ?? place.name)}`,
           imageUrl: buildGooglePlacePhotoUrl(photoReference),
           distance,
         };
 
-        return { ...lead, score: computeScore(lead) };
+        const score = computeScore(lead);
+        return { ...lead, score, scoreLabel: getScoreLabel(score) };
       } catch {
         return null;
       }
@@ -205,15 +213,37 @@ app.post('/search', async (req, res) => {
 // ─── Parcours routes ──────────────────────────────────────────────────────────
 
 app.post('/parcours/add', requireAuth, (req, res) => {
-  const { name, address, phone, score, website, rating, reviews, google_maps_url } = req.body ?? {};
+  const { name, address, phone, score, website, rating, reviews, google_maps_url, notes = '', in_tour = 0, visit_status = 'pending', tour_order = null } = req.body ?? {};
   if (!name?.trim()) return res.status(400).json({ error: 'name requis' });
 
-  const result = db.prepare(
-    `INSERT INTO parcours (user_id, name, address, phone, score, website, rating, reviews, google_maps_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(req.user.sub, name.trim(), address ?? null, phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null, google_maps_url ?? null);
+  const normalizedVisitStatus = ['pending', 'visited', 'absent'].includes(visit_status) ? visit_status : 'pending';
+  const normalizedInTour = in_tour ? 1 : 0;
+  const existing = db.prepare(
+    `SELECT id FROM parcours WHERE user_id = ? AND name = ? AND COALESCE(address,'') = COALESCE(?, '')`
+  ).get(req.user.sub, name.trim(), address ?? null);
 
-  res.json({ id: result.lastInsertRowid });
+  if (existing) {
+    db.prepare(
+      `UPDATE parcours
+       SET phone = ?, score = ?, website = ?, rating = ?, reviews = ?, google_maps_url = ?,
+           notes = ?, in_tour = ?, visit_status = ?, tour_order = ?, updated_at = datetime('now')
+       WHERE id = ? AND user_id = ?`
+    ).run(
+      phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null, google_maps_url ?? null,
+      notes ?? '', normalizedInTour, normalizedVisitStatus, tour_order, existing.id, req.user.sub
+    );
+    return res.json({ id: existing.id, updated: true });
+  }
+
+  const result = db.prepare(
+    `INSERT INTO parcours (user_id, name, address, phone, score, website, rating, reviews, google_maps_url, notes, in_tour, visit_status, tour_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    req.user.sub, name.trim(), address ?? null, phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null,
+    google_maps_url ?? null, notes ?? '', normalizedInTour, normalizedVisitStatus, tour_order
+  );
+
+  res.json({ id: result.lastInsertRowid, created: true });
 });
 
 app.get('/parcours', requireAuth, (req, res) => {
@@ -224,15 +254,39 @@ app.get('/parcours', requireAuth, (req, res) => {
 });
 
 app.patch('/parcours/:id', requireAuth, (req, res) => {
-  const { status } = req.body ?? {};
+  const { status, notes, in_tour, visit_status, tour_order } = req.body ?? {};
   const VALID_STATUSES = ['todo', 'visited', 'interested', 'not_interested'];
-  if (!VALID_STATUSES.includes(status)) {
-    return res.status(400).json({ error: 'Statut invalide' });
+  const VALID_VISIT_STATUSES = ['pending', 'visited', 'absent'];
+
+  const updates = [];
+  const values = [];
+  if (status != null) {
+    if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: 'Statut invalide' });
+    updates.push('status = ?');
+    values.push(status);
   }
+  if (typeof notes === 'string') {
+    updates.push('notes = ?');
+    values.push(notes);
+  }
+  if (in_tour != null) {
+    updates.push('in_tour = ?');
+    values.push(in_tour ? 1 : 0);
+  }
+  if (visit_status != null) {
+    if (!VALID_VISIT_STATUSES.includes(visit_status)) return res.status(400).json({ error: 'Etat visite invalide' });
+    updates.push('visit_status = ?');
+    values.push(visit_status);
+  }
+  if (tour_order != null) {
+    updates.push('tour_order = ?');
+    values.push(tour_order);
+  }
+  if (!updates.length) return res.status(400).json({ error: 'Aucune modification fournie' });
 
   const result = db.prepare(
-    `UPDATE parcours SET status = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
-  ).run(status, req.params.id, req.user.sub);
+    `UPDATE parcours SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
+  ).run(...values, req.params.id, req.user.sub);
 
   if (!result.changes) return res.status(404).json({ error: 'Non trouvé' });
   res.json({ ok: true });
@@ -245,6 +299,18 @@ app.delete('/parcours/:id', requireAuth, (req, res) => {
 
   if (!result.changes) return res.status(404).json({ error: 'Non trouvé' });
   res.json({ ok: true });
+});
+
+app.get('/tour', requireAuth, (req, res) => {
+  const rows = db.prepare(
+    `SELECT * FROM parcours
+     WHERE user_id = ? AND in_tour = 1
+     ORDER BY
+      CASE WHEN tour_order IS NULL THEN 1 ELSE 0 END,
+      tour_order ASC,
+      created_at DESC`
+  ).all(req.user.sub);
+  res.json({ tour: rows });
 });
 
 // ─── Health ───────────────────────────────────────────────────────────────────

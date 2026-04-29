@@ -35,6 +35,10 @@ db.exec(`
     rating REAL,
     reviews INTEGER,
     google_maps_url TEXT,
+    notes TEXT,
+    in_tour INTEGER DEFAULT 0,
+    visit_status TEXT CHECK(visit_status IN ('pending','visited','absent')) DEFAULT 'pending',
+    tour_order INTEGER,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
@@ -45,5 +49,21 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 `);
+
+ensureColumn('parcours', 'notes', 'TEXT');
+ensureColumn('parcours', 'in_tour', 'INTEGER DEFAULT 0');
+ensureColumn('parcours', 'visit_status', "TEXT CHECK(visit_status IN ('pending','visited','absent')) DEFAULT 'pending'");
+ensureColumn('parcours', 'tour_order', 'INTEGER');
+
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_parcours_user_name_address
+  ON parcours(user_id, name, address);
+`);
+
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (columns.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
 
 export default db;

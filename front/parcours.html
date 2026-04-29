@@ -16,10 +16,17 @@
 
     <header>
       <h1>Mon Parcours</h1>
-      <p>Gérez vos prospects sauvegardés</p>
+      <p>Organisez votre tournee terrain rapidement</p>
     </header>
 
     <div id="status" class="status hidden"></div>
+
+    <div class="search-bar">
+      <div class="search-row">
+        <input id="startAddressInput" type="text" placeholder="Adresse de depart (ex: 12 rue ...)" />
+        <button id="saveStartAddressBtn">Sauver</button>
+      </div>
+    </div>
 
     <div id="parcoursFilters" class="parcours-filters">
       <button class="filter-btn active" data-status="all">Tous</button>
@@ -27,6 +34,7 @@
       <button class="filter-btn" data-status="visited">Visité</button>
       <button class="filter-btn" data-status="interested">Intéressé</button>
       <button class="filter-btn" data-status="not_interested">Pas intéressé</button>
+      <button class="filter-btn" data-status="tour">Tournee</button>
     </div>
 
     <div id="parcoursList" class="parcours-list"></div>

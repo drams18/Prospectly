@@ -1,31 +1,34 @@
-export function computeScore(salon) {
+export function computeScore(lead) {
   let score = 0;
 
-  // Présence web
-  if (!salon.website) {
-    score += 50;
-  } else if (salon.platforms?.length) {
-    score += 35;
-  } else if (salon.isBadSite) {
-    score += 30;
+  if (!lead.website) {
+    score += 60;
   }
 
-  // Activité (avis)
-  if (salon.reviews >= 100) score += 20;
+  if ((lead.rating ?? 0) >= 4) {
+    score += 20;
+  }
 
-  // Téléphone disponible
-  if (salon.phone) score += 15;
+  if ((lead.reviews ?? 0) >= 20) {
+    score += 10;
+  }
 
-  // Note Google
-  if (salon.rating >= 4.2) score += 10;
+  if (lead.website) {
+    if (lead.siteQuality === 'improvable') score += 20;
+    if (lead.siteQuality === 'modern') score -= 40;
+  }
 
-  // Activité récente (a des avis)
-  if (salon.reviews > 0) score += 10;
+  return clampScore(score);
+}
 
-  // Proximité
-  if (salon.distance != null && salon.distance <= 500) score += 10;
+function clampScore(value) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
 
-  return Math.min(score, 100);
+export function getScoreLabel(score) {
+  if (score >= 80) return 'opportunity';
+  if (score >= 50) return 'medium';
+  return 'low';
 }
 
 function hasIncompleteData(lead) {
@@ -39,17 +42,14 @@ function hasMissingOrBrokenWebsite(lead) {
 }
 
 export function getLeadPriority(lead) {
-  // High priority: no usable website presence or incomplete business data.
-  if (hasMissingOrBrokenWebsite(lead) || !lead.googleMapsUrl || hasIncompleteData(lead)) {
+  if (lead.score >= 80) {
     return 0;
   }
 
-  // Medium priority: website exists but quality signals are weak.
-  if (lead.isBadSite || (lead.platforms?.length ?? 0) > 0) {
+  if (lead.score >= 50 || hasMissingOrBrokenWebsite(lead) || !lead.googleMapsUrl || hasIncompleteData(lead)) {
     return 1;
   }
 
-  // Low priority: complete profile and website quality looks acceptable.
   return 2;
 }
 

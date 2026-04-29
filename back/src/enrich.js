@@ -23,7 +23,10 @@ const DIRECTORY_PATTERNS = [
 
 /**
  * Analyse la présence web d'un établissement.
- * @returns {{ hasSite, isOwnSite, platforms, websiteUrl, isBadSite, badSiteReasons, responseTime }}
+ * @returns {{
+ * hasSite, isOwnSite, platforms, websiteUrl, isBadSite, badSiteReasons,
+ * responseTime, hasHttps, hasMetaTitle, hasViewport, mobileReachable, siteHealth, siteQuality
+ * }}
  */
 export async function analyzeWebsite(websiteUrl) {
   const empty = {
@@ -34,6 +37,12 @@ export async function analyzeWebsite(websiteUrl) {
     isBadSite: false,
     badSiteReasons: [],
     responseTime: null,
+    hasHttps: false,
+    hasMetaTitle: false,
+    hasViewport: false,
+    mobileReachable: false,
+    siteHealth: 'none',
+    siteQuality: 'none',
   };
 
   if (!websiteUrl) return empty;
@@ -41,25 +50,29 @@ export async function analyzeWebsite(websiteUrl) {
   // Detect booking platforms
   const bookingMatches = BOOKING_PLATFORMS.filter(p => p.pattern.test(websiteUrl)).map(p => p.name);
   if (bookingMatches.length) {
-    return { hasSite: true, isOwnSite: false, platforms: bookingMatches, websiteUrl, isBadSite: false, badSiteReasons: [], responseTime: null };
+    return { ...empty, hasSite: true, isOwnSite: false, platforms: bookingMatches, websiteUrl, siteHealth: 'correct', siteQuality: 'modern' };
   }
 
   // Detect social media (only social = no own site)
   const socialMatches = SOCIAL_PLATFORMS.filter(p => p.pattern.test(websiteUrl)).map(p => p.name);
   if (socialMatches.length) {
-    return { hasSite: true, isOwnSite: false, platforms: socialMatches, websiteUrl, isBadSite: false, badSiteReasons: [], responseTime: null };
+    return { ...empty, hasSite: true, isOwnSite: false, platforms: socialMatches, websiteUrl, siteHealth: 'improvable', siteQuality: 'basic' };
   }
 
   // Detect directories
   if (DIRECTORY_PATTERNS.some(p => p.test(websiteUrl))) {
-    return { hasSite: true, isOwnSite: false, platforms: ['Annuaire'], websiteUrl, isBadSite: false, badSiteReasons: [], responseTime: null };
+    return { ...empty, hasSite: true, isOwnSite: false, platforms: ['Annuaire'], websiteUrl, siteHealth: 'improvable', siteQuality: 'basic' };
   }
 
   // Own site — fetch and analyze quality
   const badSiteReasons = [];
   let responseTime = null;
+  const hasHttps = websiteUrl.startsWith('https://');
+  let hasMetaTitle = false;
+  let hasViewport = false;
+  let mobileReachable = false;
 
-  if (!websiteUrl.startsWith('https')) {
+  if (!hasHttps) {
     badSiteReasons.push('No HTTPS');
   }
 
@@ -84,7 +97,9 @@ export async function analyzeWebsite(websiteUrl) {
     const html = typeof response.data === 'string' ? response.data : '';
     const $ = cheerio.load(html);
 
-    if (!$('title').text().trim()) {
+    hasMetaTitle = !!$('title').text().trim();
+    hasViewport = $('meta[name="viewport"]').length > 0;
+    if (!hasMetaTitle) {
       badSiteReasons.push('No title');
     }
 
@@ -92,7 +107,7 @@ export async function analyzeWebsite(websiteUrl) {
       badSiteReasons.push('No meta description');
     }
 
-    if (!$('meta[name="viewport"]').length) {
+    if (!hasViewport) {
       badSiteReasons.push('No viewport');
     }
 
@@ -105,6 +120,22 @@ export async function analyzeWebsite(websiteUrl) {
     badSiteReasons.push('Unreachable');
   }
 
+  try {
+    const mobileResponse = await axios.get(websiteUrl, {
+      timeout: 3000,
+      maxRedirects: 3,
+      headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148' },
+      validateStatus: () => true,
+    });
+    mobileReachable = mobileResponse.status < 400;
+    if (!mobileReachable) badSiteReasons.push('Mobile HTTP error');
+  } catch {
+    badSiteReasons.push('Mobile unreachable');
+  }
+
+  const siteHealth = getSiteHealth({ badSiteReasons, hasHttps, hasMetaTitle, responseTime, hasViewport, mobileReachable });
+  const siteQuality = siteHealth === 'correct' ? 'modern' : siteHealth === 'improvable' ? 'basic' : 'weak';
+
   return {
     hasSite: true,
     isOwnSite: true,
@@ -113,5 +144,21 @@ export async function analyzeWebsite(websiteUrl) {
     isBadSite: badSiteReasons.length > 0,
     badSiteReasons,
     responseTime,
+    hasHttps,
+    hasMetaTitle,
+    hasViewport,
+    mobileReachable,
+    siteHealth,
+    siteQuality,
   };
+}
+
+function getSiteHealth({ badSiteReasons, hasHttps, hasMetaTitle, responseTime, hasViewport, mobileReachable }) {
+  const hasHardFailure = badSiteReasons.includes('Unreachable') || badSiteReasons.includes('HTTP error') || badSiteReasons.includes('Coming soon');
+  if (hasHardFailure) return 'weak';
+
+  const weakSignals = [!hasHttps, !hasMetaTitle, !hasViewport, !mobileReachable, (responseTime ?? 0) > 2200].filter(Boolean).length;
+  if (weakSignals >= 2) return 'weak';
+  if (weakSignals === 1) return 'improvable';
+  return 'correct';
 }
