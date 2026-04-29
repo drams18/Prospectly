@@ -9,7 +9,7 @@ import { analyzeWebsite } from './src/enrich.js';
 import { computeScore, sortResults } from './src/score.js';
 import { promisePool } from './src/pool.js';
 import { geocodeAddress } from './src/geocode.js';
-import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, expandKeywords, computeAdaptiveRadii } from './src/places.js';
+import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, computeAdaptiveRadii } from './src/places.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -65,8 +65,8 @@ app.post('/auth/login', async (req, res) => {
  *   location  string   – human address or city (required)
  *   lat/lng   number   – skip geocoding when provided
  *   mode      string   – 'single' (default) | 'multi' | 'scan'
- *   query     string   – compat search term (mode=single)
- *   businessType string – type d'enseigne (mode=single)
+ *   businessType string – type d'enseigne (UI only, optional)
+ *   query     string   – legacy compat field (ignored in mode=single)
  *   keywords  string[] – explicit keyword list (mode=multi)
  */
 app.post('/search', async (req, res) => {
@@ -86,9 +86,6 @@ app.post('/search', async (req, res) => {
   }
   if (!process.env.GOOGLE_MAPS_API_KEY) {
     return res.status(500).json({ error: 'GOOGLE_MAPS_API_KEY manquante dans .env' });
-  }
-  if (mode === 'single' && !effectiveType) {
-    return res.status(400).json({ error: 'businessType requis pour le mode single' });
   }
   if (mode === 'multi' && (!Array.isArray(keywords) || keywords.length === 0)) {
     return res.status(400).json({ error: 'keywords[] requis pour le mode multi' });
@@ -114,7 +111,7 @@ app.post('/search', async (req, res) => {
       ? ['scan']
       : mode === 'multi'
         ? ['multi', ...keywords.map(k => k.trim()).sort()]
-        : ['single', effectiveType];
+        : ['single'];
     const cacheKey = `${searchLat.toFixed(4)}_${searchLng.toFixed(4)}_${cacheKeyParts.join('_')}`;
 
     const cached = cacheGet(cacheKey);
@@ -127,8 +124,6 @@ app.post('/search', async (req, res) => {
       lat: searchLat,
       lng: searchLng,
       radius: fallbackRadius,
-      query: effectiveType,
-      businessType: effectiveType,
       keywords,
       mode,
       locationText: location.trim(),
@@ -176,7 +171,7 @@ app.post('/search', async (req, res) => {
       mode,
       total: sorted.length,
       ...(mode === 'scan' && { niches: SCAN_NICHES }),
-      ...(mode === 'single' && { keywords: expandKeywords(effectiveType), businessType: effectiveType, radii: adaptiveRadii }),
+      ...(mode === 'single' && { businessType: effectiveType || null, radii: adaptiveRadii }),
       ...(mode === 'multi' && { keywords }),
     };
 

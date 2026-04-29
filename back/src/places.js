@@ -78,10 +78,12 @@ export function computeAdaptiveRadii(locationText = '', fallbackRadius = 2000) {
   return [...new Set([radius, secondary, 3000])].sort((a, b) => a - b);
 }
 
-export async function searchPlaces({ lat, lng, radius, query = '', keywords = [], mode = 'single', businessType = '', locationText = '' }) {
+export async function searchPlaces({ lat, lng, radius, query = '', keywords = [], mode = 'single', locationText = '' }) {
   let searchTerms;
 
-  if (mode === 'scan') {
+  if (mode === 'single') {
+    searchTerms = [];
+  } else if (mode === 'scan') {
     searchTerms = [...new Set(Object.values(KEYWORD_MAP).flat())];
   } else if (mode === 'multi' && keywords.length > 0) {
     searchTerms = keywords.map(k => k.trim()).filter(Boolean);
@@ -89,13 +91,12 @@ export async function searchPlaces({ lat, lng, radius, query = '', keywords = []
     searchTerms = expandKeywords(query);
   }
 
-  const googleType = resolveGooglePlaceType(businessType || query);
   const radii = computeAdaptiveRadii(locationText, radius);
   const tasks = [];
 
-  for (const kw of searchTerms) {
+  for (const kw of (searchTerms.length ? searchTerms : [null])) {
     for (const currentRadius of radii) {
-      tasks.push(() => nearbySearch({ lat, lng, radius: currentRadius, keyword: kw, type: googleType }));
+      tasks.push(() => nearbySearch({ lat, lng, radius: currentRadius, keyword: kw }));
     }
   }
 
@@ -110,27 +111,27 @@ export async function searchPlaces({ lat, lng, radius, query = '', keywords = []
 
   const allPlaces = [...seen.values()];
 
-  const typeFilters = TYPE_FILTER_MAP[query?.toLowerCase()] || [];
-
   let filtered = allPlaces;
+  if (mode !== 'single') {
+    const typeFilters = TYPE_FILTER_MAP[query?.toLowerCase()] || [];
+    if (typeFilters.length) {
+      filtered = allPlaces.filter(place =>
+        place.types?.some(t => typeFilters.includes(t))
+      );
+    } else {
+      filtered = allPlaces.filter(place => {
+        const name = (place.name || '').toLowerCase();
+        const types = place.types || [];
 
-  if (typeFilters.length) {
-    filtered = allPlaces.filter(place =>
-      place.types?.some(t => typeFilters.includes(t))
-    );
-  } else {
-    filtered = allPlaces.filter(place => {
-      const name = (place.name || '').toLowerCase();
-      const types = place.types || [];
-
-      return searchTerms.some(term => {
-        const t = term.toLowerCase();
-        return (
-          name.includes(t) ||
-          types.some(type => type.includes(t))
-        );
+        return searchTerms.some(term => {
+          const t = term.toLowerCase();
+          return (
+            name.includes(t) ||
+            types.some(type => type.includes(t))
+          );
+        });
       });
-    });
+    }
   }
 
   filtered = filtered.filter(place => !isFranchise(place.name));
@@ -138,7 +139,7 @@ export async function searchPlaces({ lat, lng, radius, query = '', keywords = []
   return filtered;
 }
 
-async function nearbySearch({ lat, lng, radius, keyword, type }) {
+async function nearbySearch({ lat, lng, radius, keyword }) {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   const results = [];
   let pageToken = null;
@@ -147,12 +148,11 @@ async function nearbySearch({ lat, lng, radius, keyword, type }) {
     const params = {
       location: `${lat},${lng}`,
       radius,
-      keyword,
       key: apiKey,
       language: 'fr',
     };
 
-    if (type) params.type = type;
+    if (keyword) params.keyword = keyword;
 
     if (pageToken) {
       params.pagetoken = pageToken;

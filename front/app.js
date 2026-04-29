@@ -113,14 +113,13 @@ function removeFromHistory(location) {
 
 function updateSearchButtonState() {
   const location = locationInput.value.trim();
-  const businessType = queryInput.value.trim();
-  searchBtn.disabled = !location || !businessType;
+  searchBtn.disabled = !location;
 }
 
 async function search() {
   const location = locationInput.value.trim();
   const businessType = queryInput.value.trim();
-  if (!location || !businessType) return;
+  if (!location) return;
 
   setStatus('Recherche en cours…');
   searchBtn.disabled = true;
@@ -133,7 +132,7 @@ async function search() {
   toolbarEl.classList.add('hidden');
 
   try {
-    const body = { location, mode: 'single', query: businessType, businessType };
+    const body = { location, mode: 'single', businessType };
     if (searchLat != null && searchLng != null) {
       body.lat = searchLat;
       body.lng = searchLng;
