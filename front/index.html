@@ -19,32 +19,35 @@
       <p>Trouvez des businesses sans site web à prospecter</p>
     </header>
 
-    <div class="search-bar">
-      <div class="search-row">
-        <div class="input-wrapper">
-          <input
-            id="locationInput"
-            type="text"
-            placeholder="Paris 18, Lyon, Bordeaux..."
-            autofocus
-            autocomplete="off"
-          />
-          <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
-        </div>
-        <button id="searchBtn">Rechercher</button>
-      </div>
-      <div class="filters-row">
-        <div class="filters" id="filtersContainer">
-          <button class="filter-btn" data-query="barber">Barber</button>
-          <button class="filter-btn" data-query="restaurant">Restaurant</button>
-          <button class="filter-btn" data-query="hair salon">Salon</button>
-          <button class="filter-btn" data-query="cafe">Café</button>
-          <button class="filter-btn" data-query="car repair">Garage</button>
-        </div>
-        <button id="resetBtn" class="reset-btn hidden">↺ Réinitialiser</button>
-      </div>
-      <div id="filterError" class="filter-error hidden"></div>
+<div class="search-bar">
+  <div class="search-row">
+    <div class="input-wrapper">
+      <input
+        id="locationInput"
+        type="text"
+        placeholder="Paris 18, Lyon, Bordeaux..."
+        autofocus
+        autocomplete="off"
+      />
+      <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
     </div>
+    <button id="searchBtn">Rechercher</button>
+  </div>
+
+  <div class="filters-row">
+    <input
+      id="queryInput"
+      type="text"
+      placeholder="Ex: coiffeur, boulangerie, dentiste..."
+      class="query-input"
+    />
+
+    <button id="scanBtn" class="scan-btn">Scanner</button>
+    <button id="resetBtn" class="reset-btn hidden">↺ Réinitialiser</button>
+  </div>
+
+  <div id="filterError" class="filter-error hidden"></div>
+</div>
 
     <div id="status" class="status hidden"></div>
 

@@ -7,29 +7,10 @@ document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout
 
 const locationInput    = document.getElementById('locationInput');
 const searchBtn        = document.getElementById('searchBtn');
-const filtersContainer = document.getElementById('filtersContainer');
 const resetBtn         = document.getElementById('resetBtn');
 const filterErrorEl    = document.getElementById('filterError');
-
-const filterBtns = document.querySelectorAll('.filter-btn');
-let filtersLocked = false;
-
-filterBtns.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    if (filtersLocked) return;
-    filterBtns.forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    filtersLocked = true;
-    filtersContainer.classList.add('locked');
-    resetBtn.classList.remove('hidden');
-    filterErrorEl.classList.add('hidden');
-  });
-});
-
-function getSelectedQuery() {
-  const active = document.querySelector('.filter-btn.active');
-  return active ? active.dataset.query : null;
-}
+const queryInput = document.getElementById('queryInput');
+const scanBtn = document.getElementById('scanBtn');
 
 const statusEl      = document.getElementById('status');
 const toolbarEl     = document.getElementById('toolbar');
@@ -130,7 +111,7 @@ function removeFromHistory(location) {
 
 function resetSearch() {
   filtersLocked = false;
-  filterBtns.forEach((b) => b.classList.remove('active'));
+  queryInput.value = '';
   filtersContainer.classList.remove('locked');
   resetBtn.classList.add('hidden');
   filterErrorEl.classList.add('hidden');
@@ -150,9 +131,10 @@ async function search() {
   const location = locationInput.value.trim();
   if (!location) return;
 
-  const query = getSelectedQuery();
+const query = queryInput.value.trim();
+
   if (!query) {
-    filterErrorEl.textContent = 'Veuillez sélectionner un type de business';
+    filterErrorEl.textContent = 'Veuillez entrer un type de business';
     filterErrorEl.classList.remove('hidden');
     return;
   }
@@ -170,7 +152,7 @@ async function search() {
   toolbarEl.classList.add('hidden');
 
   try {
-    const body = { location, query };
+    const body = { location, mode: 'single', query };
     if (searchLat != null && searchLng != null) {
       body.lat = searchLat;
       body.lng = searchLng;
@@ -600,3 +582,33 @@ function initAutocomplete() {
     if (!e.target.closest('.input-wrapper')) hideDropdown();
   });
 }
+
+scanBtn.addEventListener('click', async () => {
+  const location = locationInput.value.trim();
+  if (!location) return;
+
+  setStatus('Scan en cours…');
+  searchBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_URL}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location,
+        mode: 'scan'
+      }),
+    });
+
+    if (res.status === 401) { Auth.logout(); return; }
+
+    const data = await res.json();
+    currentResults = data.results ?? [];
+    renderResults();
+    clearStatus();
+  } catch (err) {
+    setStatus('Erreur scan', true);
+  } finally {
+    searchBtn.disabled = false;
+  }
+});
