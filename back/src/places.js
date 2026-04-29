@@ -22,6 +22,8 @@ export const TYPE_FILTER_MAP = {
   restaurant: ['restaurant'],
   cafe: ['cafe'],
   pharmacie: ['pharmacy'],
+  garage: ['car_repair'],
+  boutique: ['store'],
 };
 
 export const SCAN_NICHES = Object.keys(KEYWORD_MAP);
@@ -42,7 +44,41 @@ export function expandKeywords(query) {
   return [query.trim()];
 }
 
-export async function searchPlaces({ lat, lng, radius, query = '', keywords = [], mode = 'single' }) {
+export function resolveGooglePlaceType(typeInput = '') {
+  const normalized = typeInput.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const byFilterMap = TYPE_FILTER_MAP[normalized];
+  if (byFilterMap?.length) return byFilterMap[0];
+
+  if (normalized.includes('coiff')) return 'hair_care';
+  if (normalized.includes('restau') || normalized.includes('brasserie') || normalized.includes('bistrot')) return 'restaurant';
+  if (normalized.includes('garage') || normalized.includes('carross')) return 'car_repair';
+  if (normalized.includes('boutique') || normalized.includes('magasin')) return 'store';
+  if (normalized.includes('pharma')) return 'pharmacy';
+  if (normalized.includes('cafe') || normalized.includes('café')) return 'cafe';
+  return null;
+}
+
+export function computeAdaptiveRadii(locationText = '', fallbackRadius = 2000) {
+  const text = locationText.trim().toLowerCase();
+  const baseRadius = Number.isFinite(fallbackRadius) ? fallbackRadius : 2000;
+
+  const isStreetLevel = /\b\d{1,4}\s+\S+/.test(text) || /\brue\b|\bavenue\b|\bboulevard\b|\bplace\b|\bquai\b/.test(text);
+  const isArrondissement = /\b75(0[0-9]|1[0-9]|20)\b/.test(text) || /\bparis\s*\d{1,2}(?:e|er)?\b/.test(text);
+  const isDistrict = /\bbastille|republique|république|opera|opéra|marais|montmartre|batignolles|nation|belleville|pigalle|oberkampf\b/.test(text);
+
+  let radius = baseRadius;
+  if (isStreetLevel) radius = 500;
+  else if (isArrondissement || isDistrict) radius = 1500;
+  else radius = 3000;
+
+  radius = Math.min(3000, Math.max(500, radius));
+  const secondary = Math.min(3000, radius + 800);
+  return [...new Set([radius, secondary, 3000])].sort((a, b) => a - b);
+}
+
+export async function searchPlaces({ lat, lng, radius, query = '', keywords = [], mode = 'single', businessType = '', locationText = '' }) {
   let searchTerms;
 
   if (mode === 'scan') {
@@ -53,7 +89,16 @@ export async function searchPlaces({ lat, lng, radius, query = '', keywords = []
     searchTerms = expandKeywords(query);
   }
 
-  const tasks = searchTerms.map(kw => () => textSearch({ lat, lng, radius, query: kw }));
+  const googleType = resolveGooglePlaceType(businessType || query);
+  const radii = computeAdaptiveRadii(locationText, radius);
+  const tasks = [];
+
+  for (const kw of searchTerms) {
+    for (const currentRadius of radii) {
+      tasks.push(() => nearbySearch({ lat, lng, radius: currentRadius, keyword: kw, type: googleType }));
+    }
+  }
+
   const batches = await promisePool(tasks, 4);
 
   const seen = new Map();
@@ -93,35 +138,33 @@ export async function searchPlaces({ lat, lng, radius, query = '', keywords = []
   return filtered;
 }
 
-async function textSearch({ lat, lng, radius, query }) {
+async function nearbySearch({ lat, lng, radius, keyword, type }) {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   const results = [];
   let pageToken = null;
 
   do {
     const params = {
-      query,
       location: `${lat},${lng}`,
       radius,
+      keyword,
       key: apiKey,
-      language: 'fr'
+      language: 'fr',
     };
+
+    if (type) params.type = type;
 
     if (pageToken) {
       params.pagetoken = pageToken;
       await sleep(2000);
     }
 
-    const { data } = await axios.get(`${PLACES_BASE}/textsearch/json`, { params });
-
-    if (!['OK', 'ZERO_RESULTS'].includes(data.status)) {
-      break;
-    }
+    const { data } = await axios.get(`${PLACES_BASE}/nearbysearch/json`, { params });
+    if (!['OK', 'ZERO_RESULTS'].includes(data.status)) break;
 
     results.push(...(data.results || []));
     pageToken = data.next_page_token || null;
-
-  } while (pageToken && results.length < 20);
+  } while (pageToken);
 
   return results;
 }

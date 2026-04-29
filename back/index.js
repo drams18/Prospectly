@@ -9,7 +9,7 @@ import { analyzeWebsite } from './src/enrich.js';
 import { computeScore, sortResults } from './src/score.js';
 import { promisePool } from './src/pool.js';
 import { geocodeAddress } from './src/geocode.js';
-import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, expandKeywords } from './src/places.js';
+import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, expandKeywords, computeAdaptiveRadii } from './src/places.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -65,11 +65,21 @@ app.post('/auth/login', async (req, res) => {
  *   location  string   – human address or city (required)
  *   lat/lng   number   – skip geocoding when provided
  *   mode      string   – 'single' (default) | 'multi' | 'scan'
- *   query     string   – free-form search term (mode=single)
+ *   query     string   – compat search term (mode=single)
+ *   businessType string – type d'enseigne (mode=single)
  *   keywords  string[] – explicit keyword list (mode=multi)
  */
 app.post('/search', async (req, res) => {
-  const { location, lat, lng, query = '', keywords = [], mode = 'single' } = req.body ?? {};
+  const {
+    location,
+    lat,
+    lng,
+    query = '',
+    businessType = '',
+    keywords = [],
+    mode = 'single',
+  } = req.body ?? {};
+  const effectiveType = (businessType || query || '').trim();
 
   if (!location?.trim()) {
     return res.status(400).json({ error: 'location requis' });
@@ -77,8 +87,8 @@ app.post('/search', async (req, res) => {
   if (!process.env.GOOGLE_MAPS_API_KEY) {
     return res.status(500).json({ error: 'GOOGLE_MAPS_API_KEY manquante dans .env' });
   }
-  if (mode === 'single' && !query.trim()) {
-    return res.status(400).json({ error: 'query requis pour le mode single' });
+  if (mode === 'single' && !effectiveType) {
+    return res.status(400).json({ error: 'businessType requis pour le mode single' });
   }
   if (mode === 'multi' && (!Array.isArray(keywords) || keywords.length === 0)) {
     return res.status(400).json({ error: 'keywords[] requis pour le mode multi' });
@@ -96,14 +106,15 @@ app.post('/search', async (req, res) => {
       searchLng = coords.lng;
     }
 
-    const radius = parseInt(process.env.SEARCH_RADIUS || '2000');
+    const fallbackRadius = parseInt(process.env.SEARCH_RADIUS || '2000');
+    const adaptiveRadii = computeAdaptiveRadii(location.trim(), fallbackRadius);
 
     // Cache key encodes the full search intent
     const cacheKeyParts = mode === 'scan'
       ? ['scan']
       : mode === 'multi'
         ? ['multi', ...keywords.map(k => k.trim()).sort()]
-        : ['single', query.trim()];
+        : ['single', effectiveType];
     const cacheKey = `${searchLat.toFixed(4)}_${searchLng.toFixed(4)}_${cacheKeyParts.join('_')}`;
 
     const cached = cacheGet(cacheKey);
@@ -112,7 +123,16 @@ app.post('/search', async (req, res) => {
     }
 
     // Collect raw places (deduplicated by place_id)
-    const rawPlaces = await searchPlaces({ lat: searchLat, lng: searchLng, radius, query, keywords, mode });
+    const rawPlaces = await searchPlaces({
+      lat: searchLat,
+      lng: searchLng,
+      radius: fallbackRadius,
+      query: effectiveType,
+      businessType: effectiveType,
+      keywords,
+      mode,
+      locationText: location.trim(),
+    });
     const filtered = rawPlaces.filter(p => !isFranchise(p.name ?? ''));
 
     // Parallel enrichment (max 5 concurrent)
@@ -156,7 +176,7 @@ app.post('/search', async (req, res) => {
       mode,
       total: sorted.length,
       ...(mode === 'scan' && { niches: SCAN_NICHES }),
-      ...(mode === 'single' && { keywords: expandKeywords(query) }),
+      ...(mode === 'single' && { keywords: expandKeywords(effectiveType), businessType: effectiveType, radii: adaptiveRadii }),
       ...(mode === 'multi' && { keywords }),
     };
 

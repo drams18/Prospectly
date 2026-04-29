@@ -8,6 +8,13 @@ document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout
 const locationInput    = document.getElementById('locationInput');
 const searchBtn        = document.getElementById('searchBtn');
 const queryInput = document.getElementById('queryInput');
+const arrondissementSuggestions = Array.from({ length: 20 }, (_, i) => {
+  const n = i + 1;
+  return `750${String(n).padStart(2, '0')} Paris ${n}${n === 1 ? 'er' : 'e'}`;
+});
+const districtSuggestions = [
+  'Bastille', 'Republique', 'Opera', 'Le Marais', 'Montmartre', 'Belleville', 'Nation', 'Batignolles',
+];
 
 const statusEl      = document.getElementById('status');
 const toolbarEl     = document.getElementById('toolbar');
@@ -106,14 +113,14 @@ function removeFromHistory(location) {
 
 function updateSearchButtonState() {
   const location = locationInput.value.trim();
-  const query = queryInput.value.trim();
-  searchBtn.disabled = !location || !query;
+  const businessType = queryInput.value.trim();
+  searchBtn.disabled = !location || !businessType;
 }
 
 async function search() {
   const location = locationInput.value.trim();
-  const query = queryInput.value.trim();
-  if (!location || !query) return;
+  const businessType = queryInput.value.trim();
+  if (!location || !businessType) return;
 
   setStatus('Recherche en cours…');
   searchBtn.disabled = true;
@@ -126,7 +133,7 @@ async function search() {
   toolbarEl.classList.add('hidden');
 
   try {
-    const body = { location, mode: 'single', query };
+    const body = { location, mode: 'single', query: businessType, businessType };
     if (searchLat != null && searchLng != null) {
       body.lat = searchLat;
       body.lng = searchLng;
@@ -394,6 +401,7 @@ locationInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search
 queryInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
 locationInput.addEventListener('input', updateSearchButtonState);
 queryInput.addEventListener('input', updateSearchButtonState);
+queryInput.setAttribute('list', 'businessTypeSuggestions');
 updateSearchButtonState();
 
 // ─── Autocomplete + History (Île-de-France priority) ─────────────────────────
@@ -447,8 +455,9 @@ function initAutocomplete() {
 
   function renderDropdown(historyItems, predictions, query) {
     dropdown.innerHTML = '';
+    const presetItems = getLocationPresetSuggestions(query);
 
-    if (!historyItems.length && !predictions.length) {
+    if (!historyItems.length && !presetItems.length && !predictions.length) {
       hideDropdown();
       return;
     }
@@ -463,7 +472,15 @@ function initAutocomplete() {
       historyItems.forEach(loc => dropdown.appendChild(createHistoryItem(loc, query)));
     }
 
-    const maxPreds = Math.max(0, 6 - historyItems.length);
+    if (presetItems.length) {
+      const header = document.createElement('div');
+      header.className = 'ac-section-header';
+      header.textContent = 'Suggestions localisation';
+      dropdown.appendChild(header);
+      presetItems.forEach((loc) => dropdown.appendChild(createPresetItem(loc, query)));
+    }
+
+    const maxPreds = Math.max(0, 8 - historyItems.length - presetItems.length);
     predictions.slice(0, maxPreds).forEach((pred) => {
       const isIDF = IDF_TERMS.test(pred.description);
       const item  = document.createElement('div');
@@ -523,6 +540,24 @@ function initAutocomplete() {
     return item;
   }
 
+  function createPresetItem(loc, query) {
+    const item = document.createElement('div');
+    item.className = 'autocomplete-item';
+    item.innerHTML = `
+      <span class="ac-main">${highlightMatch(loc, query)}</span>
+      <span class="ac-secondary">Suggestion rapide</span>
+    `;
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      locationInput.value = loc;
+      searchLat = null;
+      searchLng = null;
+      hideDropdown();
+      updateSearchButtonState();
+    });
+    return item;
+  }
+
   function hideDropdown() {
     dropdown.classList.add('hidden');
   }
@@ -545,4 +580,14 @@ function initAutocomplete() {
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.input-wrapper')) hideDropdown();
   });
+}
+
+function getLocationPresetSuggestions(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...arrondissementSuggestions.slice(0, 5), ...districtSuggestions.slice(0, 4)];
+
+  const all = [...arrondissementSuggestions, ...districtSuggestions];
+  return all
+    .filter((item) => item.toLowerCase().includes(q))
+    .slice(0, 6);
 }

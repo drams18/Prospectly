@@ -25,7 +25,7 @@
       <input
         id="locationInput"
         type="text"
-        placeholder="Lieu (Paris, Lyon, 75011...)"
+        placeholder="Localisation (adresse, quartier, 75011, Paris 11e...)"
         autofocus
         autocomplete="off"
       />
@@ -34,9 +34,17 @@
     <input
       id="queryInput"
       type="text"
-      placeholder="Type d'enseigne (coiffeur, restaurant, garage...)"
+      placeholder="Type d'enseigne (restaurant, coiffeur, garage...)"
       class="query-input"
     />
+    <datalist id="businessTypeSuggestions">
+      <option value="restaurant"></option>
+      <option value="coiffeur"></option>
+      <option value="garage"></option>
+      <option value="boutique"></option>
+      <option value="boulangerie"></option>
+      <option value="pharmacie"></option>
+    </datalist>
     <button id="searchBtn" disabled>Rechercher</button>
   </div>
 </div>
