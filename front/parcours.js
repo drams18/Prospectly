@@ -32,8 +32,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('parcoursList');
-const startAddressInput = document.getElementById('startAddressInput');
-const saveStartAddressBtn = document.getElementById('saveStartAddressBtn');
 
 let allParcours = [];
 let currentFilter = 'all';
@@ -58,37 +56,6 @@ async function loadUser() {
 
   user = await res.json();
   userAddress = user.start_address ?? null;
-  startAddressInput.value = userAddress ?? '';
-}
-
-async function saveStartAddress() {
-  const value = startAddressInput.value.trim();
-
-  if (!value) {
-    setStatus('L\'adresse est requise', true);
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/me`, {
-      method: 'PATCH',
-      headers: Auth.authHeaders(),
-      body: JSON.stringify({ start_address: value }),
-    });
-
-    if (res.status === 401) Auth.logout();
-    if (!res.ok) throw new Error('Erreur sauvegarde adresse');
-
-    user.start_address = value;
-    userAddress = value;
-    setStatus('Adresse enregistrée');
-    setTimeout(clearStatus, 1000);
-    
-    // Reload parcours to recalculate distances
-    await loadParcours();
-  } catch (err) {
-    setStatus(err.message, true);
-  }
 }
 
 async function loadParcours() {
@@ -270,7 +237,6 @@ document.querySelectorAll('#parcoursFilters .filter-btn').forEach(btn => {
   });
 });
 
-saveStartAddressBtn.addEventListener('click', saveStartAddress);
 
 function mapsLink(item) {
   if (!item.address) return '';
