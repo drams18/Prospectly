@@ -2,10 +2,6 @@ const API_URL = 'https://prospectly-production-a949.up.railway.app';
 
 window.Auth = {
   getToken() {
-    if (this.isExpired()) {
-      this.logout();
-      return null;
-    }
     return localStorage.getItem('prospectly_token');
   },
 
@@ -31,26 +27,52 @@ window.Auth = {
     localStorage.removeItem('prospectly_token');
     localStorage.removeItem('prospectly_username');
     localStorage.removeItem('prospectly_expiry');
-  
-    window.location.href = '/Prospectly/login.html';
+
+    // safe redirect (évite reload loops)
+    window.location.replace('/Prospectly/login.html');
   },
 
   authHeaders() {
+    const token = this.getToken();
+
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.getToken()}`,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
     };
   },
 
   requireAuth() {
+    // Check if we're on login page - allow access without token
     const isLoginPage = window.location.pathname.includes('login.html');
+    if (isLoginPage) return true;
 
-    if (!this.getToken() && !isLoginPage) {
-      window.location.href = '/Prospectly/login.html';
+    const token = this.getToken();
+    
+    // If no token, redirect to login
+    if (!token) {
+      this.logout();
+      return false;
+    }
+
+    // Check expiration WITHOUT side effect
+    const expired = this.isExpired();
+    if (expired) {
+      this.logout();
+      return false;
+    }
+
+    return true;
+  },
+
+  checkSession() {
+    const token = this.getToken();
+    if (!token) return false;
+    if (this.isExpired()) {
+      this.logout();
       return false;
     }
     return true;
-  },
+  }
 };
 
 window.API_URL = API_URL;

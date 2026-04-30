@@ -37,9 +37,18 @@
 
   <script src="auth.js"></script>
   <script>
-    if (Auth.getToken()) window.location.href = 'index.html';
+    /**
+     * SAFE REDIRECT (évite boucle infinie)
+     * - Wrapped in DOMContentLoaded to avoid execution before DOM ready
+     * - utilise replace() pour éviter retour arrière infini
+     */
+    document.addEventListener('DOMContentLoaded', function() {
+      // Only redirect if token exists AND we're on register page
+      if (typeof Auth !== 'undefined' && Auth.getToken() && window.location.pathname.includes('register')) {
+        window.location.replace('index.html');
+      }
 
-    const form = document.getElementById('registerForm');
+      const form = document.getElementById('registerForm');
     const errorEl = document.getElementById('authError');
     const submitBtn = document.getElementById('submitBtn');
 
@@ -84,6 +93,7 @@
         submitBtn.textContent = 'Créer le compte';
       }
     });
+  });
   </script>
 </body>
 </html>

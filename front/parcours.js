@@ -1,16 +1,39 @@
-const isLoginPage = window.location.pathname.includes('login.html');
+// ─── Auth Guard — wrapped in DOMContentLoaded to prevent early execution ──────
+// IMPORTANT: This MUST be inside DOMContentLoaded to avoid redirect loops
+// Uses replace() to prevent back-button infinite loop
 
-if (!Auth.getToken() && !isLoginPage) {
-  window.location.href = '/Prospectly/login.html';
-}
+document.addEventListener('DOMContentLoaded', function() {
+  // Single auth guard - executed only once when DOM is ready
+  if (typeof Auth !== 'undefined') {
+    const isLoginPage = window.location.pathname.includes('login.html');
+    const token = Auth.getToken();
+    const expired = Auth.isExpired();
+
+    if ((!token || expired) && !isLoginPage) {
+      // Use replace() to prevent back-button redirect loop
+      window.location.replace('/Prospectly/login.html');
+      return; // Stop execution after redirect
+    }
+
+    // Setup auth bar only if user is authenticated
+    if (token && !expired) {
+      const usernameDisplay = document.getElementById('usernameDisplay');
+      const logoutBtn = document.getElementById('logoutBtn');
+      
+      if (usernameDisplay) {
+        usernameDisplay.textContent = Auth.getUsername() ?? '';
+      }
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => Auth.logout());
+      }
+    }
+  }
+});
 
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('parcoursList');
 const startAddressInput = document.getElementById('startAddressInput');
 const saveStartAddressBtn = document.getElementById('saveStartAddressBtn');
-
-document.getElementById('usernameDisplay').textContent = Auth.getUsername() ?? '';
-document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout());
 
 let allParcours = [];
 let currentFilter = 'all';

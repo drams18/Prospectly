@@ -6,6 +6,7 @@
   <title>Connexion — Prospectly</title>
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body class="auth-page">
   <div class="container auth-container">
     <header>
@@ -31,21 +32,35 @@
 
       <button type="submit" id="submitBtn">Se connecter</button>
 
-      <p class="auth-switch">Pas encore de compte ? <a href="register.html">Créer un compte</a></p>
+      <p class="auth-switch">
+        Pas encore de compte ? <a href="register.html">Créer un compte</a>
+      </p>
     </form>
   </div>
 
+  <!-- Auth helper -->
   <script src="auth.js"></script>
-  <script>
-    // Redirect if already logged in
-    if (Auth.getToken()) window.location.href = 'index.html';
 
-    const form = document.getElementById('loginForm');
+  <script>
+    /**
+     * SAFE REDIRECT (évite boucle infinie)
+     * - Wrapped in DOMContentLoaded to avoid execution before DOM ready
+     * - Check uniquement si on est sur login
+     * - utilise replace() pour éviter retour arrière infini
+     */
+    document.addEventListener('DOMContentLoaded', function() {
+      // Only redirect if token exists AND we're on login page
+      if (typeof Auth !== 'undefined' && Auth.getToken() && window.location.pathname.includes('login')) {
+        window.location.replace('index.html');
+      }
+
+      const form = document.getElementById('loginForm');
     const errorEl = document.getElementById('authError');
     const submitBtn = document.getElementById('submitBtn');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+
       errorEl.classList.add('hidden');
       submitBtn.disabled = true;
       submitBtn.textContent = 'Connexion...';
@@ -60,17 +75,26 @@
           body: JSON.stringify({ username, password }),
         });
 
-        const data = await res.json();
+        let data = null;
+        try {
+          data = await res.json();
+        } catch (e) {
+          throw new Error("Réponse serveur invalide");
+        }
 
         if (!res.ok) {
-          errorEl.textContent = data.error || 'Erreur de connexion';
+          errorEl.textContent = data?.error || 'Erreur de connexion';
           errorEl.classList.remove('hidden');
           return;
         }
 
+        // Save session
         Auth.setSession(data.token, data.username);
-        window.location.href = 'index.html';
-      } catch {
+
+        // Safe redirect (replace prevents loop back)
+        window.location.replace('index.html');
+
+      } catch (err) {
         errorEl.textContent = 'Impossible de contacter le serveur';
         errorEl.classList.remove('hidden');
       } finally {
@@ -78,6 +102,7 @@
         submitBtn.textContent = 'Se connecter';
       }
     });
+  });
   </script>
 </body>
 </html>
