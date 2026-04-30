@@ -62,8 +62,31 @@ let searchLat        = null;
 let searchLng        = null;
 let acDebounce       = null;
 let parcoursSet      = new Set();
-const QUICK_SMS_SCRIPT = "Bonjour, j'ai remarque que vous n'avez pas de site web. Je peux vous en creer un simple pour attirer plus de clients.";
-const QUICK_CALL_SCRIPT = "Bonjour, je fais des sites web pour les commerces locaux, j'ai vu que vous n'avez pas de site. Je peux vous proposer une solution simple pour attirer plus de clients.";
+const QUICK_SMS_SCRIPT = (prospect = {}) => {
+  const name = prospect.name || "votre établissement";
+  const type = (prospect.types || []).join(' ').toLowerCase();
+
+  let label = "commerces";
+  if (type.includes('hair') || type.includes('beauty')) label = "salons";
+  else if (type.includes('restaurant') || type.includes('food')) label = "restaurants";
+  else if (type.includes('gym') || type.includes('fitness')) label = "salles de sport";
+  else if (type.includes('car') || type.includes('garage')) label = "garages";
+
+  return `Bonjour, je vous contacte car j’aide des ${label} comme ${name} à obtenir plus de clients via Google et à automatiser les réservations. Est-ce que vous avez déjà un site optimisé aujourd’hui ?`;
+};
+
+const QUICK_CALL_SCRIPT = (prospect = {}) => {
+  const name = prospect.name || "votre établissement";
+  const type = (prospect.types || []).join(' ').toLowerCase();
+
+  let label = "commerces";
+  if (type.includes('hair') || type.includes('beauty')) label = "salons";
+  else if (type.includes('restaurant') || type.includes('food')) label = "restaurants";
+  else if (type.includes('gym') || type.includes('fitness')) label = "salles de sport";
+  else if (type.includes('car') || type.includes('garage')) label = "garages";
+
+  return `Bonjour, je travaille avec des ${label} comme ${name} pour leur apporter plus de clients via Google et simplifier les réservations. Je voulais savoir si vous avez déjà un site performant aujourd’hui ?`;
+};
 const FALLBACK_PLACE_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
     <rect width="800" height="450" fill="#f1f5f9"/>
@@ -545,8 +568,22 @@ function applyFilters(results) {
 }
 
 function buildSmsMessage(prospect) {
-  if (!prospect?.name) return QUICK_SMS_SCRIPT;
-  return `Bonjour, j'ai remarque que ${prospect.name} n'a pas de site web moderne. Je peux vous en creer un simple pour attirer plus de clients.`;
+  if (!prospect) return '';
+
+  const name = prospect.name || 'votre établissement';
+
+  // Détection simple du type
+  const type = (prospect.types || []).join(' ').toLowerCase();
+
+  let label = 'établissements';
+
+  if (type.includes('hair') || type.includes('beauty')) label = 'salons';
+  else if (type.includes('restaurant') || type.includes('food')) label = 'restaurants';
+  else if (type.includes('gym') || type.includes('fitness')) label = 'salles de sport';
+  else if (type.includes('car') || type.includes('garage')) label = 'garages';
+  else if (type.includes('store') || type.includes('shop')) label = 'commerces';
+
+  return `Bonjour, je vous contacte car j’aide les ${label} comme ${name} à obtenir plus de clients via Google et à automatiser les réservations. Est-ce que vous avez déjà un site ou pas vraiment optimisé aujourd’hui ?`;
 }
 
 async function copyToClipboard(text) {
