@@ -590,12 +590,19 @@ function clearStatus() {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
-searchBtn.addEventListener('click', handleSearch);
-searchForm?.addEventListener('submit', handleSearch);
+searchForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  search();
+});
+
+// Inputs → activer/désactiver bouton
 locationInput.addEventListener('input', updateSearchButtonState);
 queryInput.addEventListener('input', updateSearchButtonState);
-queryInput.setAttribute('list', 'businessTypeSuggestions');
-updateSearchButtonState();
+
+// Init état bouton au chargement
+document.addEventListener('DOMContentLoaded', updateSearchButtonState);
+
+// Filtres
 filterNoWebsite?.addEventListener('change', renderResults);
 filterMinRating?.addEventListener('input', renderResults);
 filterMinScore?.addEventListener('input', renderResults);
