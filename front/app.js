@@ -255,7 +255,7 @@ function renderResults() {
           </div>
           <div class="card-actions">
             ${s.phone ? `<a class="quick-btn" href="tel:${escape(s.phone)}">Appeler</a>` : ''}
-            <button class="quick-btn secondary" data-quick="copy-phone" data-index="${i}">Copier numero</button>
+            <button class="quick-btn secondary" data-quick="copy-phone" data-index="${i}">Copier numéro</button>
             <button class="quick-btn secondary" data-quick="copy-msg" data-index="${i}">Copier message</button>
             <a class="quick-btn secondary" href="${escape(s.googleMapsUrl)}" target="_blank" rel="noopener">Maps</a>
           </div>
@@ -398,7 +398,7 @@ function renderDetail(s) {
 
     <div class="detail-actions">
       ${phone ? `<a class="quick-btn" href="tel:${escape(phone)}">Appeler</a>` : ''}
-      <button class="quick-btn secondary" id="copyPhoneBtn">Copier numero</button>
+      <button class="quick-btn secondary" id="copyPhoneBtn">Copier numéro</button>
       <button class="quick-btn secondary" id="copySmsBtn">Copier message</button>
       <a class="quick-btn secondary" href="${escape(s.googleMapsUrl)}" target="_blank" rel="noopener">Maps</a>
     </div>
@@ -425,7 +425,6 @@ function renderDetail(s) {
       ? `<button class="btn-add-parcours btn-added" id="addParcoursBtn" disabled>Déjà dans le parcours</button>`
       : `<button class="btn-add-parcours" id="addParcoursBtn">+ Ajouter au parcours</button>`
     }
-    <button class="btn-add-parcours" id="addTourBtn">+ Ajouter a la tournee</button>
   `;
 
   if (isMobile()) {
