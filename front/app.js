@@ -106,6 +106,8 @@ async function loadParcoursSet() {
   try {
     const res = await fetch(`${API_URL}/parcours`, { headers: Auth.authHeaders() });
     if (!res.ok) return;
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) return;
     const data = await res.json();
     parcoursSet = new Set((data.parcours || []).map(p => `${p.name}||${p.address}`));
   } catch {}

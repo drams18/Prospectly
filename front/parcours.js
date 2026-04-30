@@ -21,6 +21,16 @@ async function loadUser() {
     headers: Auth.authHeaders(),
   });
   if (res.status === 401) Auth.logout();
+  if (!res.ok) {
+    console.error(`[loadUser] Erreur ${res.status}: ${res.statusText}`);
+    return;
+  }
+
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    console.error('[loadUser] Response n\'est pas du JSON');
+    return;
+  }
 
   user = await res.json();
   startAddressInput.value = user.start_address ?? '';

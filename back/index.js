@@ -366,6 +366,12 @@ app.get('/tour', requireAuth, (req, res) => {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// ─── 404 handler ──────────────────────────────────────────────────────────────
+
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
 app.listen(PORT, () => {
   console.log(`Prospectly backend → http://localhost:${PORT}`);
 });
