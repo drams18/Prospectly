@@ -31,7 +31,7 @@
 
       <div class="form-field">
         <label for="startAddress">Adresse de référence <span class="field-hint">(pour calcul des distances)</span></label>
-        <input id="startAddress" type="text" placeholder="Votre adresse (ex: 75011 Paris)" autocomplete="off" />
+        <input id="startAddress" type="text" placeholder="Votre adresse (ex: 75011 Paris)" autocomplete="off" required />
         <div id="address-autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
       </div>
 
@@ -43,13 +43,7 @@
 
   <script src="auth.js"></script>
   <script>
-    /**
-     * SAFE REDIRECT (évite boucle infinie)
-     * - Wrapped in DOMContentLoaded to avoid execution before DOM ready
-     * - utilise replace() pour éviter retour arrière infini
-     */
     document.addEventListener('DOMContentLoaded', function() {
-      // Only redirect if token exists AND we're on register page
       if (typeof Auth !== 'undefined' && Auth.getToken() && window.location.pathname.includes('register')) {
         window.location.replace('index.html');
       }
@@ -58,15 +52,28 @@
       const errorEl = document.getElementById('authError');
       const submitBtn = document.getElementById('submitBtn');
       const startAddressInput = document.getElementById('startAddress');
+      const dropdown = document.getElementById('address-autocomplete-dropdown');
       let selectedAddress = null;
 
-      // Initialize Google Places autocomplete for address field
+      function escape(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function highlightMatch(text, query) {
+        if (!query) return escape(text);
+        const idx = text.toLowerCase().indexOf(query.toLowerCase());
+        if (idx === -1) return escape(text);
+        return escape(text.slice(0, idx))
+          + `<mark class="ac-highlight">${escape(text.slice(idx, idx + query.length))}</mark>`
+          + escape(text.slice(idx + query.length));
+      }
+
       function initAddressAutocomplete() {
-        if (typeof google === 'undefined' || !google.maps) return;
-        
         const autocompleteService = new google.maps.places.AutocompleteService();
         const placesService = new google.maps.places.PlacesService(document.createElement('div'));
-        const dropdown = document.getElementById('address-autocomplete-dropdown');
         const IDF_CENTER = new google.maps.LatLng(48.8566, 2.3522);
         let debounce = null;
 
@@ -96,22 +103,8 @@
           }, 300);
         });
 
-        startAddressInput.addEventListener('focus', () => {
-          if (startAddressInput.value.trim()) {
-            startAddressInput.dispatchEvent(new Event('input'));
-          }
-        });
-
-        startAddressInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape') {
-            dropdown.classList.add('hidden');
-            selectedAddress = null;
-          }
-        });
-
         function renderDropdown(predictions, query) {
           dropdown.innerHTML = '';
-          
           if (!predictions.length) {
             dropdown.classList.add('hidden');
             return;
@@ -143,9 +136,7 @@
 
           placesService.getDetails(
             { placeId: pred.place_id, fields: ['geometry'] },
-            (place, status) => {
-              // We just need the formatted address, coordinates will be geocoded on backend
-            }
+            () => {}
           );
         }
 
@@ -156,33 +147,9 @@
         });
       }
 
-      function highlightMatch(text, query) {
-        if (!query) return escape(text);
-        const idx = text.toLowerCase().indexOf(query.toLowerCase());
-        if (idx === -1) return escape(text);
-        return escape(text.slice(0, idx))
-          + `<mark class="ac-highlight">${escape(text.slice(idx, idx + query.length))}</mark>`
-          + escape(text.slice(idx + query.length));
-      }
-
-      function escape(str) {
-        return String(str ?? '')
-          .replace(/&/g, '&')
-          .replace(/</g, '<')
-          .replace(/>/g, '>');
-      }
-
-      // Initialize autocomplete when Google Maps is loaded
-      if (typeof google !== 'undefined' && google.maps) {
+      window.initRegisterAutocomplete = function () {
         initAddressAutocomplete();
-      } else {
-        const checkGoogle = setInterval(() => {
-          if (typeof google !== 'undefined' && google.maps) {
-            clearInterval(checkGoogle);
-            initAddressAutocomplete();
-          }
-        }, 500);
-      }
+      };
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -192,10 +159,26 @@
 
         const username = document.getElementById('username').value.trim();
         const password = document.getElementById('password').value;
-        const start_address = startAddressInput.value.trim() || null;
+        const start_address = startAddressInput.value.trim();
 
         if (password.length < 6) {
           errorEl.textContent = 'Le mot de passe doit contenir au moins 6 caractères';
+          errorEl.classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Créer le compte';
+          return;
+        }
+
+        if (!start_address) {
+          errorEl.textContent = "L'adresse est obligatoire";
+          errorEl.classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Créer le compte';
+          return;
+        }
+
+        if (!selectedAddress) {
+          errorEl.textContent = "Veuillez sélectionner une adresse dans la liste";
           errorEl.classList.remove('hidden');
           submitBtn.disabled = false;
           submitBtn.textContent = 'Créer le compte';
@@ -209,15 +192,20 @@
             body: JSON.stringify({ username, password, start_address }),
           });
 
-          const data = await res.json();
+          let data = null;
+          const contentType = res.headers.get('content-type');
+
+          if (contentType && contentType.includes('application/json')) {
+            data = await res.json();
+          }
 
           if (!res.ok) {
-            errorEl.textContent = data.error || 'Erreur lors de la création du compte';
+            errorEl.textContent = data?.error || 'Erreur lors de la création du compte';
             errorEl.classList.remove('hidden');
             return;
           }
 
-          window.location.href = 'login.html';
+          window.location.replace('login.html');
         } catch {
           errorEl.textContent = 'Impossible de contacter le serveur';
           errorEl.classList.remove('hidden');
@@ -228,9 +216,9 @@
       });
     });
   </script>
-  
+
   <script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDu5OU_yf5-KHEWOvLHcfpDlWryJS-gHtk&libraries=places"
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDu5OU_yf5-KHEWOvLHcfpDlWryJS-gHtk&libraries=places&callback=initRegisterAutocomplete"
     async
     defer
   ></script>
