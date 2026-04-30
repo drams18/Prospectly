@@ -7,6 +7,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout
 
 const locationInput    = document.getElementById('locationInput');
 const searchBtn        = document.getElementById('searchBtn');
+const searchForm       = document.getElementById('searchForm');
 const queryInput = document.getElementById('queryInput');
 const arrondissementSuggestions = Array.from({ length: 20 }, (_, i) => {
   const n = i + 1;
@@ -56,6 +57,7 @@ mobileOverlayBackdrop.addEventListener('click', closeMobileOverlay);
 let currentResults   = [];
 let displayedResults = [];
 let selectedIndex    = null;
+let isSearching      = false;
 let searchLat        = null;
 let searchLng        = null;
 let acDebounce       = null;
@@ -127,16 +129,17 @@ function removeFromHistory(location) {
 
 function updateSearchButtonState() {
   const location = locationInput.value.trim();
-  searchBtn.disabled = !location;
+  searchBtn.disabled = isSearching || location === '';
 }
 
 async function search() {
   const location = locationInput.value.trim();
   const businessType = queryInput.value.trim();
-  if (!location) return;
+  if (!location || isSearching) return;
 
+  isSearching = true;
   setStatus('Recherche en cours…');
-  searchBtn.disabled = true;
+  updateSearchButtonState();
   resultsEl.innerHTML = '';
   detailPanel.classList.add('hidden');
   closeMobileOverlay();
@@ -170,8 +173,14 @@ async function search() {
     console.error('[Prospectly] Erreur API /search :', err);
     setStatus(`Erreur : ${err.message}`, true);
   } finally {
+    isSearching = false;
     updateSearchButtonState();
   }
+}
+
+function handleSearch(event) {
+  if (event) event.preventDefault();
+  search();
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -581,9 +590,8 @@ function clearStatus() {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
-searchBtn.addEventListener('click', search);
-locationInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
-queryInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+searchBtn.addEventListener('click', handleSearch);
+searchForm?.addEventListener('submit', handleSearch);
 locationInput.addEventListener('input', updateSearchButtonState);
 queryInput.addEventListener('input', updateSearchButtonState);
 queryInput.setAttribute('list', 'businessTypeSuggestions');
@@ -724,6 +732,7 @@ function initAutocomplete() {
       searchLat = null;
       searchLng = null;
       hideDropdown();
+      updateSearchButtonState();
     });
 
     return item;
@@ -754,6 +763,7 @@ function initAutocomplete() {
   function selectPrediction(pred) {
     locationInput.value = pred.description;
     hideDropdown();
+    updateSearchButtonState();
 
     placesService.getDetails(
       { placeId: pred.place_id, fields: ['geometry'] },

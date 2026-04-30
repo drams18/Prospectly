@@ -20,7 +20,7 @@
     </header>
 
 <div class="search-bar">
-  <div class="search-row">
+  <form id="searchForm" class="search-row">
     <div class="input-wrapper">
       <input
         id="locationInput"
@@ -45,8 +45,8 @@
       <option value="boulangerie"></option>
       <option value="pharmacie"></option>
     </datalist>
-    <button id="searchBtn" disabled>Rechercher</button>
-  </div>
+    <button id="searchBtn" type="submit" disabled>Rechercher</button>
+  </form>
   <div class="filters-row">
     <label class="filter-inline">
       <input type="checkbox" id="filterNoWebsite" />
