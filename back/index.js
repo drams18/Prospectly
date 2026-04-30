@@ -303,7 +303,7 @@ app.get('/parcours', requireAuth, (req, res) => {
 
 app.patch('/parcours/:id', requireAuth, (req, res) => {
   const { status, notes, visit_status } = req.body ?? {};
-  const VALID_STATUSES = ['todo', 'visited', 'interested', 'not_interested'];
+  const VALID_STATUSES = ['todo', 'done', 'not_done'];
   const VALID_VISIT_STATUSES = ['pending', 'visited', 'absent'];
 
   const updates = [];

@@ -112,8 +112,12 @@ function renderParcours() {
     return;
   }
 
-  listEl.innerHTML = filtered.map(p => `
-    <div class="parcours-card" data-id="${p.id}">
+  listEl.innerHTML = filtered.map(p => {
+    // Determine status class for card styling
+    const statusClass = p.status === 'done' ? 'status-done' : p.status === 'not_done' ? 'status-not-done' : 'status-todo';
+    
+    return `
+    <div class="parcours-card ${statusClass}" data-id="${p.id}">
       <div class="parcours-body">
         <div class="card-name">${escape(p.name)}</div>
         ${p.address ? `<div class="card-address">${escape(p.address)}</div>` : ''}
@@ -122,9 +126,8 @@ function renderParcours() {
         <div class="parcours-status-row">
           <select class="status-select" data-id="${p.id}">
             <option value="todo" ${p.status === 'todo' ? 'selected' : ''}>À faire</option>
-            <option value="visited" ${p.status === 'visited' ? 'selected' : ''}>Visité</option>
-            <option value="interested" ${p.status === 'interested' ? 'selected' : ''}>Intéressé</option>
-            <option value="not_interested" ${p.status === 'not_interested' ? 'selected' : ''}>Pas intéressé</option>
+            <option value="done" ${p.status === 'done' ? 'selected' : ''}>Fait</option>
+            <option value="not_done" ${p.status === 'not_done' ? 'selected' : ''}>Non fait</option>
           </select>
 
           ${mapsLink(p)}
@@ -133,7 +136,7 @@ function renderParcours() {
         </div>
       </div>
     </div>
-  `).join('');
+  `}).join('');
 
   listEl.querySelectorAll('.status-select').forEach(el => {
     el.addEventListener('change', e => {
