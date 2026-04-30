@@ -68,6 +68,39 @@ app.post('/auth/login', async (req, res) => {
   res.json({ token: signToken(user.id, user.username), username: user.username });
 });
 
+app.get('/me', requireAuth, (req, res) => {
+  try {
+    const user = db.prepare(
+      'SELECT id, username, start_address FROM users WHERE id = ?'
+    ).get(req.user.sub);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur introuvable' });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error('[/me]', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.patch('/me', requireAuth, (req, res) => {
+  const { start_address } = req.body ?? {};
+
+  try {
+    db.prepare(
+      `UPDATE users
+       SET start_address = ?
+       WHERE id = ?`
+    ).run(start_address ?? null, req.user.sub);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[/me PATCH]', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 // ─── Search route ─────────────────────────────────────────────────────────────
 
 /**
