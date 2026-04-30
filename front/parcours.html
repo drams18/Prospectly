@@ -6,8 +6,10 @@
   <title>Mon Parcours — Prospectly</title>
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <div class="container">
+
     <div class="auth-bar">
       <a href="index.html" class="nav-link">← Retour</a>
       <span id="usernameDisplay" class="auth-username"></span>
@@ -16,14 +18,14 @@
 
     <header>
       <h1>Mon Parcours</h1>
-      <p>Organisez votre tournee terrain rapidement</p>
+      <p>Organisez votre tournée terrain rapidement</p>
     </header>
 
     <div id="status" class="status hidden"></div>
 
     <div class="search-bar">
       <div class="search-row">
-        <input id="startAddressInput" type="text" placeholder="Adresse de depart (ex: 12 rue ...)" />
+        <input id="startAddressInput" type="text" placeholder="Adresse de départ" />
         <button id="saveStartAddressBtn">Sauver</button>
       </div>
     </div>
@@ -34,7 +36,7 @@
       <button class="filter-btn" data-status="visited">Visité</button>
       <button class="filter-btn" data-status="interested">Intéressé</button>
       <button class="filter-btn" data-status="not_interested">Pas intéressé</button>
-      <button class="filter-btn" data-status="tour">Tournee</button>
+      <button class="filter-btn" data-status="tour">Tournée</button>
     </div>
 
     <div id="parcoursList" class="parcours-list"></div>
