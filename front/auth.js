@@ -31,7 +31,8 @@ window.Auth = {
     localStorage.removeItem('prospectly_token');
     localStorage.removeItem('prospectly_username');
     localStorage.removeItem('prospectly_expiry');
-    window.location.href = 'login.html';
+  
+    window.location.href = '/Prospectly/login.html';
   },
 
   authHeaders() {
@@ -42,8 +43,10 @@ window.Auth = {
   },
 
   requireAuth() {
-    if (!this.getToken()) {
-      window.location.href = 'login.html';
+    const isLoginPage = window.location.pathname.includes('login.html');
+
+    if (!this.getToken() && !isLoginPage) {
+      window.location.href = '/Prospectly/login.html';
       return false;
     }
     return true;

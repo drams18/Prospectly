@@ -1,4 +1,8 @@
-if (!Auth.getToken()) window.location.href = 'login.html';
+const isLoginPage = window.location.pathname.includes('login.html');
+
+if (!Auth.getToken() && !isLoginPage) {
+  window.location.href = '/Prospectly/login.html';
+}
 
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('parcoursList');

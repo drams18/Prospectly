@@ -1,5 +1,9 @@
 // Auth guard — redirect if not logged in
-if (!Auth.getToken()) window.location.href = 'login.html';
+const isLoginPage = window.location.pathname.includes('login.html');
+
+if (!Auth.getToken() && !isLoginPage) {
+  window.location.href = '/Prospectly/login.html';
+}
 
 // Auth bar
 document.getElementById('usernameDisplay').textContent = Auth.getUsername() ?? '';
