@@ -73,21 +73,31 @@ app.post('/auth/login', async (req, res) => {
 
 app.get('/me', requireAuth, (req, res) => {
   try {
-    console.log('[/me] User ID from token:', req.user.sub);
+    // Convert user ID to number to match database type
+    const userId = Number(req.user.sub);
+    
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'ID utilisateur invalide' });
+    }
+
     const user = db.prepare(
       'SELECT id, username, start_address FROM users WHERE id = ?'
-    ).get(req.user.sub);
+    ).get(userId);
 
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur introuvable' });
     }
 
-    res.json(user);
+    // Return clean JSON response
+    res.json({
+      id: user.id,
+      username: user.username,
+      start_address: user.start_address
+    });
   } catch (err) {
     console.error('[/me] Error:', err);
-    console.error('[/me] Error message:', err.message);
-    console.error('[/me] Error stack:', err.stack);
-    res.status(500).json({ error: 'Erreur serveur: ' + err.message });
+    // Return 500 with safe error message (don't expose internal details)
+    res.status(500).json({ error: 'Erreur serveur lors de la récupération du profil' });
   }
 });
 
@@ -95,6 +105,13 @@ app.patch('/me', requireAuth, (req, res) => {
   const { start_address, username, current_password } = req.body ?? {};
 
   try {
+    // Convert user ID to number to match database type
+    const userId = Number(req.user.sub);
+    
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'ID utilisateur invalide' });
+    }
+
     const updates = [];
     const values = [];
 
@@ -107,7 +124,7 @@ app.patch('/me', requireAuth, (req, res) => {
       // Verify current password
       const user = db.prepare(
         'SELECT password_hash FROM users WHERE id = ?'
-      ).get(req.user.sub);
+      ).get(userId);
 
       if (!user) {
         return res.status(404).json({ error: 'Utilisateur introuvable' });
@@ -120,7 +137,7 @@ app.patch('/me', requireAuth, (req, res) => {
 
       // Check if username is already taken
       const existingUser = findUserByUsername(username);
-      if (existingUser && existingUser.id !== req.user.sub) {
+      if (existingUser && existingUser.id !== userId) {
         return res.status(409).json({ error: "Nom d'utilisateur déjà pris" });
       }
 
@@ -136,7 +153,7 @@ app.patch('/me', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Aucune modification fournie' });
     }
 
-    values.push(req.user.sub);
+    values.push(userId);
 
     db.prepare(
       `UPDATE users SET ${updates.join(', ')} WHERE id = ?`
@@ -153,13 +170,20 @@ app.patch('/me', requireAuth, (req, res) => {
 
 app.delete('/account', requireAuth, (req, res) => {
   try {
+    // Convert user ID to number to match database type
+    const userId = Number(req.user.sub);
+    
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'ID utilisateur invalide' });
+    }
+    
     // Delete all related data first (cascading should handle this, but being explicit)
-    db.prepare('DELETE FROM parcours WHERE user_id = ?').run(req.user.sub);
-    db.prepare('DELETE FROM seen_prospects WHERE user_id = ?').run(req.user.sub);
-    db.prepare('DELETE FROM search_history WHERE user_id = ?').run(req.user.sub);
+    db.prepare('DELETE FROM parcours WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM seen_prospects WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM search_history WHERE user_id = ?').run(userId);
     
     // Delete the user
-    db.prepare('DELETE FROM users WHERE id = ?').run(req.user.sub);
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
 
     res.json({ ok: true });
   } catch (err) {
@@ -172,7 +196,11 @@ app.delete('/account', requireAuth, (req, res) => {
 
 app.delete('/history', requireAuth, (req, res) => {
   try {
-    db.prepare('DELETE FROM search_history WHERE user_id = ?').run(req.user.sub);
+    const userId = Number(req.user.sub);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'ID utilisateur invalide' });
+    }
+    db.prepare('DELETE FROM search_history WHERE user_id = ?').run(userId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[DELETE /history]', err);
@@ -182,7 +210,11 @@ app.delete('/history', requireAuth, (req, res) => {
 
 app.delete('/seen/clear', requireAuth, (req, res) => {
   try {
-    db.prepare('DELETE FROM seen_prospects WHERE user_id = ?').run(req.user.sub);
+    const userId = Number(req.user.sub);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'ID utilisateur invalide' });
+    }
+    db.prepare('DELETE FROM seen_prospects WHERE user_id = ?').run(userId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[DELETE /seen/clear]', err);

@@ -210,10 +210,26 @@ async function removeFromHistory(location) {
 async function loadUser() {
   try {
     const res = await fetch(`${API_URL}/me`, { headers: Auth.authHeaders() });
+    
+    // Handle 401 - token invalide ou expiré
+    if (res.status === 401) {
+      Auth.logout();
+      return;
+    }
+    
     if (!res.ok) return;
+    
+    // Vérifier que la réponse est du JSON
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      return;
+    }
+    
     const user = await res.json();
     userAddress = user.start_address ?? null;
-  } catch {}
+  } catch {
+    // En cas d'erreur réseau ou autre, on continue silencieusement
+  }
 }
 
 // ─── Initialize data from database ────────────────────────────────────────────
@@ -700,7 +716,8 @@ filterCategory?.addEventListener('input', renderResults);
 
 const IDF_TERMS = /île.de.france|paris|hauts.de.seine|seine.saint.denis|val.de.marne|essonne|yvelines|val.d.oise|seine.et.marne/i;
 
-function initAutocomplete() {
+// Make initAutocomplete globally accessible for Google Maps callback
+window.initAutocomplete = function() {
   const autocompleteService = new google.maps.places.AutocompleteService();
   const placesService       = new google.maps.places.PlacesService(document.createElement('div'));
   const dropdown            = document.getElementById('autocomplete-dropdown');
@@ -874,7 +891,7 @@ function initAutocomplete() {
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.input-wrapper')) hideDropdown();
   });
-}
+};
 
 function getLocationPresetSuggestions(query) {
   const q = query.trim().toLowerCase();
