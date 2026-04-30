@@ -73,6 +73,7 @@ app.post('/auth/login', async (req, res) => {
 
 app.get('/me', requireAuth, (req, res) => {
   try {
+    console.log('[/me] User ID from token:', req.user.sub);
     const user = db.prepare(
       'SELECT id, username, start_address FROM users WHERE id = ?'
     ).get(req.user.sub);
@@ -83,8 +84,10 @@ app.get('/me', requireAuth, (req, res) => {
 
     res.json(user);
   } catch (err) {
-    console.error('[/me]', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    console.error('[/me] Error:', err);
+    console.error('[/me] Error message:', err.message);
+    console.error('[/me] Error stack:', err.stack);
+    res.status(500).json({ error: 'Erreur serveur: ' + err.message });
   }
 });
 
