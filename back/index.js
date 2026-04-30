@@ -89,18 +89,100 @@ app.get('/me', requireAuth, (req, res) => {
 });
 
 app.patch('/me', requireAuth, (req, res) => {
-  const { start_address } = req.body ?? {};
+  const { start_address, username, current_password } = req.body ?? {};
 
   try {
+    const updates = [];
+    const values = [];
+
+    if (start_address !== undefined) {
+      updates.push('start_address = ?');
+      values.push(start_address ?? null);
+    }
+
+    if (username !== undefined && current_password !== undefined) {
+      // Verify current password
+      const user = db.prepare(
+        'SELECT password_hash FROM users WHERE id = ?'
+      ).get(req.user.sub);
+
+      if (!user) {
+        return res.status(404).json({ error: 'Utilisateur introuvable' });
+      }
+
+      const validPassword = verifyPassword(current_password, user.password_hash);
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Mot de passe incorrect' });
+      }
+
+      // Check if username is already taken
+      const existingUser = findUserByUsername(username);
+      if (existingUser && existingUser.id !== req.user.sub) {
+        return res.status(409).json({ error: "Nom d'utilisateur déjà pris" });
+      }
+
+      if (username.length < 3) {
+        return res.status(400).json({ error: 'Le nom d\'utilisateur doit faire au moins 3 caractères' });
+      }
+
+      updates.push('username = ?');
+      values.push(username.trim());
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'Aucune modification fournie' });
+    }
+
+    values.push(req.user.sub);
+
     db.prepare(
-      `UPDATE users
-       SET start_address = ?
-       WHERE id = ?`
-    ).run(start_address ?? null, req.user.sub);
+      `UPDATE users SET ${updates.join(', ')} WHERE id = ?`
+    ).run(...values);
 
     res.json({ ok: true });
   } catch (err) {
     console.error('[/me PATCH]', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// ─── Account deletion ──────────────────────────────────────────────────────────
+
+app.delete('/account', requireAuth, (req, res) => {
+  try {
+    // Delete all related data first (cascading should handle this, but being explicit)
+    db.prepare('DELETE FROM parcours WHERE user_id = ?').run(req.user.sub);
+    db.prepare('DELETE FROM seen_prospects WHERE user_id = ?').run(req.user.sub);
+    db.prepare('DELETE FROM search_history WHERE user_id = ?').run(req.user.sub);
+    
+    // Delete the user
+    db.prepare('DELETE FROM users WHERE id = ?').run(req.user.sub);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /account]', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// ─── Clear history ──────────────────────────────────────────────────────────
+
+app.delete('/history', requireAuth, (req, res) => {
+  try {
+    db.prepare('DELETE FROM search_history WHERE user_id = ?').run(req.user.sub);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /history]', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.delete('/seen/clear', requireAuth, (req, res) => {
+  try {
+    db.prepare('DELETE FROM seen_prospects WHERE user_id = ?').run(req.user.sub);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[DELETE /seen/clear]', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
