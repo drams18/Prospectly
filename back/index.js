@@ -148,44 +148,60 @@ app.post('/search', async (req, res) => {
       try {
         const details = await getPlaceDetails(place.place_id);
         if (!details) return null;
-
-        const webInfo = await analyzeWebsite(details.website ?? null);
-
+    
         const placeLat = details.geometry?.location?.lat ?? place.geometry?.location?.lat;
         const placeLng = details.geometry?.location?.lng ?? place.geometry?.location?.lng;
+    
         const distance = (placeLat != null && placeLng != null)
           ? haversineDistance(searchLat, searchLng, placeLat, placeLng)
           : null;
-
+    
         const photo =
           details.photos?.[0] ||
           place.photos?.[0] ||
           null;
+    
         const photoReference = photo?.photo_reference ?? null;
+    
+        // ⚡ FAST MODE : pas de scraping ici
+        const hasWebsite = !!details.website;
+    
         const lead = {
           name: details.name ?? place.name,
           address: details.formatted_address ?? place.vicinity ?? '',
           phone: details.formatted_phone_number ?? null,
           rating: details.rating ?? place.rating ?? null,
           reviews: details.user_ratings_total ?? place.user_ratings_total ?? 0,
-          website: webInfo.websiteUrl,
-          platforms: webInfo.platforms,
-          isBadSite: webInfo.isBadSite,
-          badSiteReasons: webInfo.badSiteReasons,
-          siteHealth: webInfo.siteHealth,
-          siteQuality: webInfo.siteQuality,
-          responseTime: webInfo.responseTime,
-          hasHttps: webInfo.hasHttps,
-          hasMetaTitle: webInfo.hasMetaTitle,
-          hasViewport: webInfo.hasViewport,
-          mobileReachable: webInfo.mobileReachable,
-          googleMapsUrl: details.url ?? `https://maps.google.com/?q=${encodeURIComponent(details.name ?? place.name)}`,
+    
+          // simplifié
+          website: details.website ?? null,
+          hasWebsite,
+    
+          platforms: [],
+          isBadSite: false,
+          badSiteReasons: [],
+          siteHealth: hasWebsite ? 'unknown' : 'none',
+    
+          siteQuality: null,
+          responseTime: null,
+          hasHttps: details.website?.startsWith('https') ?? false,
+          hasMetaTitle: null,
+          hasViewport: null,
+          mobileReachable: null,
+    
+          googleMapsUrl:
+            details.url ??
+            `https://maps.google.com/?q=${encodeURIComponent(details.name ?? place.name)}`,
+    
           imageUrl: buildGooglePlacePhotoUrl(photoReference),
           distance,
         };
-
+    
+        // ⚡ score rapide (sans analyse site)
         const score = computeScore(lead);
+    
         return { ...lead, score, scoreLabel: getScoreLabel(score) };
+    
       } catch {
         return null;
       }
