@@ -104,7 +104,6 @@ async function loadParcours() {
 function renderParcours() {
   const filtered = allParcours.filter((p) => {
     if (currentFilter === 'all') return true;
-    if (currentFilter === 'tour') return p.in_tour === 1;
     return p.status === currentFilter;
   });
 
@@ -128,10 +127,6 @@ function renderParcours() {
             <option value="not_interested" ${p.status === 'not_interested' ? 'selected' : ''}>Pas intéressé</option>
           </select>
 
-          <button class="filter-btn toggle-tour-btn" data-id="${p.id}">
-            ${p.in_tour ? 'Retirer tournée' : 'Ajouter tournée'}
-          </button>
-
           ${mapsLink(p)}
 
           <button class="btn-delete" data-id="${p.id}">Supprimer</button>
@@ -148,14 +143,6 @@ function renderParcours() {
 
   listEl.querySelectorAll('.btn-delete').forEach(btn => {
     btn.addEventListener('click', e => deleteParcours(e.target.dataset.id));
-  });
-
-  listEl.querySelectorAll('.toggle-tour-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      const id = e.target.dataset.id;
-      const item = allParcours.find(p => String(p.id) === String(id));
-      updateProspect(id, { in_tour: item?.in_tour ? 0 : 1 });
-    });
   });
 }
 

@@ -37,9 +37,7 @@ db.exec(`
     reviews INTEGER,
     google_maps_url TEXT,
     notes TEXT,
-    in_tour INTEGER DEFAULT 0,
     visit_status TEXT CHECK(visit_status IN ('pending','visited','absent')) DEFAULT 'pending',
-    tour_order INTEGER,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
@@ -52,9 +50,7 @@ db.exec(`
 `);
 
 ensureColumn('parcours', 'notes', 'TEXT');
-ensureColumn('parcours', 'in_tour', 'INTEGER DEFAULT 0');
 ensureColumn('parcours', 'visit_status', "TEXT CHECK(visit_status IN ('pending','visited','absent')) DEFAULT 'pending'");
-ensureColumn('parcours', 'tour_order', 'INTEGER');
 
 db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_parcours_user_name_address

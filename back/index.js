@@ -262,11 +262,10 @@ app.post('/search', async (req, res) => {
 // ─── Parcours routes ──────────────────────────────────────────────────────────
 
 app.post('/parcours/add', requireAuth, (req, res) => {
-  const { name, address, phone, score, website, rating, reviews, google_maps_url, notes = '', in_tour = 0, visit_status = 'pending', tour_order = null } = req.body ?? {};
+  const { name, address, phone, score, website, rating, reviews, google_maps_url, notes = '', visit_status = 'pending' } = req.body ?? {};
   if (!name?.trim()) return res.status(400).json({ error: 'name requis' });
 
   const normalizedVisitStatus = ['pending', 'visited', 'absent'].includes(visit_status) ? visit_status : 'pending';
-  const normalizedInTour = in_tour ? 1 : 0;
   const existing = db.prepare(
     `SELECT id FROM parcours WHERE user_id = ? AND name = ? AND COALESCE(address,'') = COALESCE(?, '')`
   ).get(req.user.sub, name.trim(), address ?? null);
@@ -275,21 +274,21 @@ app.post('/parcours/add', requireAuth, (req, res) => {
     db.prepare(
       `UPDATE parcours
        SET phone = ?, score = ?, website = ?, rating = ?, reviews = ?, google_maps_url = ?,
-           notes = ?, in_tour = ?, visit_status = ?, tour_order = ?, updated_at = datetime('now')
+           notes = ?, visit_status = ?, updated_at = datetime('now')
        WHERE id = ? AND user_id = ?`
     ).run(
       phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null, google_maps_url ?? null,
-      notes ?? '', normalizedInTour, normalizedVisitStatus, tour_order, existing.id, req.user.sub
+      notes ?? '', normalizedVisitStatus, existing.id, req.user.sub
     );
     return res.json({ id: existing.id, updated: true });
   }
 
   const result = db.prepare(
-    `INSERT INTO parcours (user_id, name, address, phone, score, website, rating, reviews, google_maps_url, notes, in_tour, visit_status, tour_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO parcours (user_id, name, address, phone, score, website, rating, reviews, google_maps_url, notes, visit_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     req.user.sub, name.trim(), address ?? null, phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null,
-    google_maps_url ?? null, notes ?? '', normalizedInTour, normalizedVisitStatus, tour_order
+    google_maps_url ?? null, notes ?? '', normalizedVisitStatus
   );
 
   res.json({ id: result.lastInsertRowid, created: true });
@@ -303,7 +302,7 @@ app.get('/parcours', requireAuth, (req, res) => {
 });
 
 app.patch('/parcours/:id', requireAuth, (req, res) => {
-  const { status, notes, in_tour, visit_status, tour_order } = req.body ?? {};
+  const { status, notes, visit_status } = req.body ?? {};
   const VALID_STATUSES = ['todo', 'visited', 'interested', 'not_interested'];
   const VALID_VISIT_STATUSES = ['pending', 'visited', 'absent'];
 
@@ -318,18 +317,10 @@ app.patch('/parcours/:id', requireAuth, (req, res) => {
     updates.push('notes = ?');
     values.push(notes);
   }
-  if (in_tour != null) {
-    updates.push('in_tour = ?');
-    values.push(in_tour ? 1 : 0);
-  }
   if (visit_status != null) {
     if (!VALID_VISIT_STATUSES.includes(visit_status)) return res.status(400).json({ error: 'Etat visite invalide' });
     updates.push('visit_status = ?');
     values.push(visit_status);
-  }
-  if (tour_order != null) {
-    updates.push('tour_order = ?');
-    values.push(tour_order);
   }
   if (!updates.length) return res.status(400).json({ error: 'Aucune modification fournie' });
 
@@ -348,18 +339,6 @@ app.delete('/parcours/:id', requireAuth, (req, res) => {
 
   if (!result.changes) return res.status(404).json({ error: 'Non trouvé' });
   res.json({ ok: true });
-});
-
-app.get('/tour', requireAuth, (req, res) => {
-  const rows = db.prepare(
-    `SELECT * FROM parcours
-     WHERE user_id = ? AND in_tour = 1
-     ORDER BY
-      CASE WHEN tour_order IS NULL THEN 1 ELSE 0 END,
-      tour_order ASC,
-      created_at DESC`
-  ).all(req.user.sub);
-  res.json({ tour: rows });
 });
 
 // ─── Health ───────────────────────────────────────────────────────────────────

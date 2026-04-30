@@ -465,7 +465,6 @@ function renderDetail(s) {
 
   // Attach after render (element now exists in DOM)
   document.getElementById('addParcoursBtn')?.addEventListener('click', () => addToParcours(s));
-  document.getElementById('addTourBtn')?.addEventListener('click', () => addToTour(s));
   document.getElementById('copyPhoneBtn')?.addEventListener('click', () => copyToClipboard(s.phone || ''));
   document.getElementById('copySmsBtn')?.addEventListener('click', () => copyToClipboard(buildSmsMessage(s)));
   document.getElementById('copyCallScriptBtn')?.addEventListener('click', () => copyToClipboard(QUICK_CALL_SCRIPT));
@@ -493,7 +492,6 @@ async function addToParcours(prospect) {
         rating: prospect.rating,
         reviews: prospect.reviews,
         google_maps_url: prospect.googleMapsUrl,
-        in_tour: 0,
         notes: '',
         visit_status: 'pending',
       }),
@@ -509,33 +507,6 @@ async function addToParcours(prospect) {
   } catch {
     btn.disabled = false;
     btn.textContent = '+ Ajouter au parcours';
-  }
-}
-
-async function addToTour(prospect) {
-  try {
-    const res = await fetch(`${API_URL}/parcours/add`, {
-      method: 'POST',
-      headers: Auth.authHeaders(),
-      body: JSON.stringify({
-        name: prospect.name,
-        address: prospect.address,
-        phone: prospect.phone,
-        score: prospect.score,
-        website: prospect.website,
-        rating: prospect.rating,
-        reviews: prospect.reviews,
-        google_maps_url: prospect.googleMapsUrl,
-        in_tour: 1,
-        visit_status: 'pending',
-      }),
-    });
-    if (res.status === 401) { Auth.logout(); return; }
-    if (!res.ok) throw new Error('Erreur serveur');
-    setStatus('Ajoute a la tournee');
-    setTimeout(clearStatus, 1000);
-  } catch {
-    setStatus('Impossible d ajouter a la tournee', true);
   }
 }
 
