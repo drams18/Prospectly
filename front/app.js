@@ -1,5 +1,5 @@
 // ─── Auth Guard — wrapped in DOMContentLoaded to prevent early execution ──────
-// IMPORTANT: This MUST be inside DOMContentLoaded to avoid redirect loops
+// IMPORTANT: This MUST be inside DOMContentLoaded to avoid execution before DOM ready
 // Uses replace() to prevent back-button infinite loop
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -89,6 +89,10 @@ let searchLat        = null;
 let searchLng        = null;
 let acDebounce       = null;
 let parcoursSet      = new Set();
+let seenSet          = new Set();
+let searchHistory    = [];
+let userAddress      = null; // User's stored address from database
+
 const QUICK_SMS_SCRIPT = (prospect = {}) => {
   const name = prospect.name || "votre établissement";
   const type = (prospect.types || []).join(' ').toLowerCase();
@@ -99,7 +103,7 @@ const QUICK_SMS_SCRIPT = (prospect = {}) => {
   else if (type.includes('gym') || type.includes('fitness')) label = "salles de sport";
   else if (type.includes('car') || type.includes('garage')) label = "garages";
 
-  return `Bonjour, je vous contacte car j’aide des ${label} comme ${name} à obtenir plus de clients via Google et à automatiser les réservations. Est-ce que vous avez déjà un site optimisé aujourd’hui ?`;
+  return `Bonjour, je vous contacte car j'aide des ${label} comme ${name} à obtenir plus de clients via Google et à automatiser les réservations. Est-ce que vous avez déjà un site optimisé aujourd'hui ?`;
 };
 
 const QUICK_CALL_SCRIPT = (prospect = {}) => {
@@ -112,8 +116,9 @@ const QUICK_CALL_SCRIPT = (prospect = {}) => {
   else if (type.includes('gym') || type.includes('fitness')) label = "salles de sport";
   else if (type.includes('car') || type.includes('garage')) label = "garages";
 
-  return `Bonjour, je travaille avec des ${label} comme ${name} pour leur apporter plus de clients via Google et simplifier les réservations. Je voulais savoir si vous avez déjà un site performant aujourd’hui ?`;
+  return `Bonjour, je travaille avec des ${label} comme ${name} pour leur apporter plus de clients via Google et simplifier les réservations. Je voulais savoir si vous avez déjà un site performant aujourd'hui ?`;
 };
+
 const FALLBACK_PLACE_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
     <rect width="800" height="450" fill="#f1f5f9"/>
@@ -136,46 +141,91 @@ async function loadParcoursSet() {
   } catch {}
 }
 
-loadParcoursSet();
+// ─── Seen prospects (database) ────────────────────────────────────────────────
 
-// ─── Seen prospects (localStorage) ────────────────────────────────────────────
-
-function seenKey(s) {
-  return `${s.name}||${s.address}`;
-}
-
-function loadSeen() {
+async function loadSeen() {
   try {
-    return new Set(JSON.parse(localStorage.getItem('prospectly_seen') || '[]'));
+    const res = await fetch(`${API_URL}/seen`, { headers: Auth.authHeaders() });
+    if (!res.ok) return new Set();
+    const data = await res.json();
+    seenSet = new Set((data.seen || []).map(s => `${s.name}||${s.address}`));
   } catch {
-    return new Set();
+    seenSet = new Set();
   }
 }
 
-function markSeen(s) {
-  const seen = loadSeen();
-  seen.add(seenKey(s));
-  localStorage.setItem('prospectly_seen', JSON.stringify([...seen]));
+async function markSeen(s) {
+  const key = seenKey(s);
+  if (seenSet.has(key)) return;
+  
+  try {
+    await fetch(`${API_URL}/seen`, {
+      method: 'POST',
+      headers: Auth.authHeaders(),
+      body: JSON.stringify({ name: s.name, address: s.address }),
+    });
+    seenSet.add(key);
+  } catch {}
 }
 
-// ─── Search history (localStorage) ────────────────────────────────────────────
+// ─── Search history (database) ────────────────────────────────────────────────
 
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem('prospectly_history') || '[]'); }
-  catch { return []; }
+async function loadHistory() {
+  try {
+    const res = await fetch(`${API_URL}/history?limit=10`, { headers: Auth.authHeaders() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    searchHistory = (data.history || []).map(h => h.location);
+  } catch {
+    searchHistory = [];
+  }
 }
 
-function addToHistory(location) {
-  const history = loadHistory().filter(h => h !== location);
-  history.unshift(location);
-  localStorage.setItem('prospectly_history', JSON.stringify(history.slice(0, 10)));
+async function addToHistory(location) {
+  try {
+    await fetch(`${API_URL}/history`, {
+      method: 'POST',
+      headers: Auth.authHeaders(),
+      body: JSON.stringify({ location }),
+    });
+    // Update local cache
+    searchHistory = searchHistory.filter(h => h !== location);
+    searchHistory.unshift(location);
+    searchHistory = searchHistory.slice(0, 10);
+  } catch {}
 }
 
-function removeFromHistory(location) {
-  localStorage.setItem('prospectly_history', JSON.stringify(
-    loadHistory().filter(h => h !== location)
-  ));
+async function removeFromHistory(location) {
+  try {
+    await fetch(`${API_URL}/history/${encodeURIComponent(location)}`, {
+      method: 'DELETE',
+      headers: Auth.authHeaders(),
+    });
+    searchHistory = searchHistory.filter(h => h !== location);
+  } catch {}
 }
+
+// ─── Load user data ───────────────────────────────────────────────────────────
+
+async function loadUser() {
+  try {
+    const res = await fetch(`${API_URL}/me`, { headers: Auth.authHeaders() });
+    if (!res.ok) return;
+    const user = await res.json();
+    userAddress = user.start_address ?? null;
+  } catch {}
+}
+
+// ─── Initialize data from database ────────────────────────────────────────────
+
+async function initializeData() {
+  await loadUser();
+  await loadParcoursSet();
+  await loadSeen();
+  await loadHistory();
+}
+
+initializeData();
 
 // ─── Search ───────────────────────────────────────────────────────────────────
 
@@ -218,7 +268,7 @@ async function search() {
 
     const data = await res.json();
     currentResults = Array.isArray(data) ? data : (data.results ?? []);
-    addToHistory(location);
+    await addToHistory(location);
     renderResults();
     clearStatus();
   } catch (err) {
@@ -243,7 +293,6 @@ function renderResults() {
     return;
   }
 
-  const seen = loadSeen();
   displayedResults = applyFilters(currentResults);
   if (!displayedResults.length) {
     resultCountEl.textContent = '0 prospect trouve';
@@ -256,7 +305,7 @@ function renderResults() {
   toolbarEl.classList.remove('hidden');
 
   const cards = displayedResults.map((s, i) => {
-    const isSeen = seen.has(seenKey(s));
+    const isSeen = seenSet.has(seenKey(s));
     const imageUrl = escape(s.imageUrl || FALLBACK_PLACE_IMAGE);
     const actionLabel = 'Voir details';
     return `
@@ -494,6 +543,9 @@ async function addToParcours(prospect) {
         google_maps_url: prospect.googleMapsUrl,
         notes: '',
         visit_status: 'pending',
+        status: 'not_done', // Default status: non fait
+        lat: prospect.lat,
+        lng: prospect.lng,
       }),
     });
 
@@ -582,7 +634,7 @@ function buildSmsMessage(prospect) {
   else if (type.includes('car') || type.includes('garage')) label = 'garages';
   else if (type.includes('store') || type.includes('shop')) label = 'commerces';
 
-  return `Bonjour, je vous contacte car j’aide les ${label} comme ${name} à obtenir plus de clients via Google et à automatiser les réservations. Est-ce que vous avez déjà un site ou pas vraiment optimisé aujourd’hui ?`;
+  return `Bonjour, je vous contacte car j'aide les ${label} comme ${name} à obtenir plus de clients via Google et à automatiser les réservations. Est-ce que vous avez déjà un site ou pas vraiment optimisé aujourd'hui ?`;
 }
 
 async function copyToClipboard(text) {
@@ -598,9 +650,9 @@ async function copyToClipboard(text) {
 
 function escape(str) {
   return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>');
 }
 
 function highlightMatch(text, query) {
@@ -655,7 +707,7 @@ function initAutocomplete() {
   const IDF_CENTER          = new google.maps.LatLng(48.8566, 2.3522);
 
   locationInput.addEventListener('focus', () => {
-    if (!locationInput.value.trim()) renderDropdown(loadHistory(), [], '');
+    if (!locationInput.value.trim()) renderDropdown(searchHistory, [], '');
   });
 
   locationInput.addEventListener('input', () => {
@@ -665,12 +717,12 @@ function initAutocomplete() {
 
     const query = locationInput.value.trim();
     if (!query) {
-      renderDropdown(loadHistory(), [], '');
+      renderDropdown(searchHistory, [], '');
       return;
     }
 
     acDebounce = setTimeout(() => {
-      const historyMatches = loadHistory().filter(h =>
+      const historyMatches = searchHistory.filter(h =>
         h.toLowerCase().includes(query.toLowerCase())
       );
 
@@ -742,7 +794,7 @@ function initAutocomplete() {
     dropdown.classList.remove('hidden');
   }
 
-  function createHistoryItem(loc, query) {
+  async function createHistoryItem(loc, query) {
     const item = document.createElement('div');
     item.className = 'autocomplete-item history-item';
 
@@ -832,4 +884,8 @@ function getLocationPresetSuggestions(query) {
   return all
     .filter((item) => item.toLowerCase().includes(q))
     .slice(0, 6);
+}
+
+function seenKey(s) {
+  return `${s.name}||${s.address}`;
 }

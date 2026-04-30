@@ -1296,6 +1296,53 @@ body.auth-page {
   border-left-color: #b91c1c;
 }
 
+/* ── Favorite card styling ───────────────────────────────────────────────────── */
+.parcours-card.favorite {
+  border-left-width: 6px;
+  border-left-color: #f59e0b !important;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.parcours-card.favorite:hover {
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.2);
+}
+
+/* ── Card header with favorite button ────────────────────────────────────────── */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.btn-favorite {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  opacity: 0.4;
+}
+
+.btn-favorite:hover {
+  opacity: 0.7;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.btn-favorite.active {
+  opacity: 1;
+}
+
+.card-distance {
+  font-size: 0.78rem;
+  color: var(--primary);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
 .empty-state {
   color: var(--text-muted);
   text-align: center;

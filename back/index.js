@@ -35,7 +35,7 @@ app.use(express.json());
 // ─── Auth routes ──────────────────────────────────────────────────────────────
 
 app.post('/auth/register', async (req, res) => {
-  const { username, password } = req.body ?? {};
+  const { username, password, start_address } = req.body ?? {};
 
   if (!username?.trim() || !password || password.length < 6) {
     return res.status(400).json({ error: 'Username et mot de passe (min 6 caractères) requis' });
@@ -43,7 +43,10 @@ app.post('/auth/register', async (req, res) => {
 
   try {
     const hash = await hashPassword(password);
-    const id = createUser(username.trim(), hash);
+    const stmt = db.prepare(
+      'INSERT INTO users (username, password_hash, start_address) VALUES (?, ?, ?)'
+    );
+    const id = stmt.run(username.trim(), hash, start_address ?? null).lastInsertRowid;
     res.json({ ok: true, id });
   } catch (err) {
     if (err.message?.includes('UNIQUE')) {
@@ -262,7 +265,12 @@ app.post('/search', async (req, res) => {
 // ─── Parcours routes ──────────────────────────────────────────────────────────
 
 app.post('/parcours/add', requireAuth, (req, res) => {
-  const { name, address, phone, score, website, rating, reviews, google_maps_url, notes = '', visit_status = 'pending' } = req.body ?? {};
+  const { 
+    name, address, phone, score, website, rating, reviews, 
+    google_maps_url, notes = '', visit_status = 'pending',
+    lat, lng 
+  } = req.body ?? {};
+  
   if (!name?.trim()) return res.status(400).json({ error: 'name requis' });
 
   const normalizedVisitStatus = ['pending', 'visited', 'absent'].includes(visit_status) ? visit_status : 'pending';
@@ -274,54 +282,128 @@ app.post('/parcours/add', requireAuth, (req, res) => {
     db.prepare(
       `UPDATE parcours
        SET phone = ?, score = ?, website = ?, rating = ?, reviews = ?, google_maps_url = ?,
-           notes = ?, visit_status = ?, updated_at = datetime('now')
+           notes = ?, visit_status = ?, lat = ?, lng = ?, updated_at = datetime('now')
        WHERE id = ? AND user_id = ?`
     ).run(
       phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null, google_maps_url ?? null,
-      notes ?? '', normalizedVisitStatus, existing.id, req.user.sub
+      notes ?? '', normalizedVisitStatus, lat ?? null, lng ?? null, existing.id, req.user.sub
     );
     return res.json({ id: existing.id, updated: true });
   }
 
+  // New parcours items start with status 'not_done' by default
   const result = db.prepare(
-    `INSERT INTO parcours (user_id, name, address, phone, score, website, rating, reviews, google_maps_url, notes, visit_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO parcours (user_id, name, address, phone, score, website, rating, reviews, google_maps_url, notes, visit_status, status, lat, lng)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_done', ?, ?)`
   ).run(
     req.user.sub, name.trim(), address ?? null, phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null,
-    google_maps_url ?? null, notes ?? '', normalizedVisitStatus
+    google_maps_url ?? null, notes ?? '', normalizedVisitStatus, lat ?? null, lng ?? null
   );
 
   res.json({ id: result.lastInsertRowid, created: true });
 });
 
-app.get('/parcours', requireAuth, (req, res) => {
+app.get('/parcours', requireAuth, async (req, res) => {
+  const { user_address } = req.query ?? {};
+  
+  // Get user's stored address if not provided
+  let refLat = null, refLng = null;
+  
+  try {
+    if (user_address) {
+      // If user provided an address for this search, geocode it
+      const coords = await geocodeAddress(user_address);
+      refLat = coords.lat;
+      refLng = coords.lng;
+    } else {
+      // Use user's stored address
+      const user = db.prepare('SELECT start_address FROM users WHERE id = ?').get(req.user.sub);
+      if (user?.start_address) {
+        const coords = await geocodeAddress(user.start_address);
+        refLat = coords.lat;
+        refLng = coords.lng;
+      }
+    }
+  } catch (err) {
+    // If geocoding fails, we'll just sort by created_at
+  }
+  
+  // Get parcours items sorted by distance if we have reference coordinates
+  let rows;
+  if (refLat != null && refLng != null) {
+    rows = db.prepare(`
+      SELECT *, 
+        (((? - lat) * (? - lat)) + ((? - lng) * (? - lng))) as distance_sq
+      FROM parcours 
+      WHERE user_id = ? AND lat IS NOT NULL AND lng IS NOT NULL
+      ORDER BY distance_sq ASC, created_at DESC
+    `).all(refLat, refLat, refLng, refLng, req.user.sub);
+    
+    // Also get items without coordinates and append them at the end
+    const noCoords = db.prepare(`
+      SELECT * FROM parcours 
+      WHERE user_id = ? AND (lat IS NULL OR lng IS NULL)
+      ORDER BY created_at DESC
+    `).all(req.user.sub);
+    
+    rows = [...rows, ...noCoords];
+  } else {
+    rows = db.prepare(
+      'SELECT * FROM parcours WHERE user_id = ? ORDER BY created_at DESC'
+    ).all(req.user.sub);
+  }
+  
+  res.json({ parcours: rows });
+});
+
+// Get favorites only
+app.get('/parcours/favorites', requireAuth, (req, res) => {
   const rows = db.prepare(
-    'SELECT * FROM parcours WHERE user_id = ? ORDER BY created_at DESC'
+    'SELECT * FROM parcours WHERE user_id = ? AND is_favorite = 1 ORDER BY created_at DESC'
   ).all(req.user.sub);
   res.json({ parcours: rows });
 });
 
 app.patch('/parcours/:id', requireAuth, (req, res) => {
-  const { status, notes, visit_status } = req.body ?? {};
-  const VALID_STATUSES = ['todo', 'done', 'not_done'];
+  const { status, notes, visit_status, is_favorite, lat, lng } = req.body ?? {};
+  const VALID_STATUSES = ['done', 'not_done'];
   const VALID_VISIT_STATUSES = ['pending', 'visited', 'absent'];
 
   const updates = [];
   const values = [];
+  
   if (status != null) {
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: 'Statut invalide' });
     updates.push('status = ?');
     values.push(status);
   }
+  
   if (typeof notes === 'string') {
     updates.push('notes = ?');
     values.push(notes);
   }
+  
   if (visit_status != null) {
     if (!VALID_VISIT_STATUSES.includes(visit_status)) return res.status(400).json({ error: 'Etat visite invalide' });
     updates.push('visit_status = ?');
     values.push(visit_status);
   }
+  
+  if (is_favorite != null) {
+    updates.push('is_favorite = ?');
+    values.push(is_favorite ? 1 : 0);
+  }
+  
+  if (lat != null) {
+    updates.push('lat = ?');
+    values.push(lat);
+  }
+  
+  if (lng != null) {
+    updates.push('lng = ?');
+    values.push(lng);
+  }
+  
   if (!updates.length) return res.status(400).json({ error: 'Aucune modification fournie' });
 
   const result = db.prepare(
@@ -338,6 +420,79 @@ app.delete('/parcours/:id', requireAuth, (req, res) => {
   ).run(req.params.id, req.user.sub);
 
   if (!result.changes) return res.status(404).json({ error: 'Non trouvé' });
+  res.json({ ok: true });
+});
+
+// ─── Seen prospects routes ────────────────────────────────────────────────────
+
+app.get('/seen', requireAuth, (req, res) => {
+  const rows = db.prepare(
+    'SELECT name, address, seen_at FROM seen_prospects WHERE user_id = ? ORDER BY seen_at DESC'
+  ).all(req.user.sub);
+  res.json({ seen: rows });
+});
+
+app.post('/seen', requireAuth, (req, res) => {
+  const { name, address } = req.body ?? {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name requis' });
+
+  try {
+    db.prepare(
+      'INSERT OR IGNORE INTO seen_prospects (user_id, name, address) VALUES (?, ?, ?)'
+    ).run(req.user.sub, name.trim(), address ?? null);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/seen/:name', requireAuth, (req, res) => {
+  const { address } = req.query;
+  db.prepare(
+    'DELETE FROM seen_prospects WHERE user_id = ? AND name = ? AND COALESCE(address,\'\') = COALESCE(?, \'\')'
+  ).run(req.user.sub, req.params.name, address ?? null);
+  res.json({ ok: true });
+});
+
+// ─── Search history routes ────────────────────────────────────────────────────
+
+app.get('/history', requireAuth, (req, res) => {
+  const { limit = 10 } = req.query;
+  const rows = db.prepare(
+    'SELECT location, searched_at FROM search_history WHERE user_id = ? ORDER BY searched_at DESC LIMIT ?'
+  ).all(req.user.sub, parseInt(limit));
+  res.json({ history: rows });
+});
+
+app.post('/history', requireAuth, (req, res) => {
+  const { location } = req.body ?? {};
+  if (!location?.trim()) return res.status(400).json({ error: 'location requis' });
+
+  try {
+    db.prepare(
+      'INSERT INTO search_history (user_id, location) VALUES (?, ?)'
+    ).run(req.user.sub, location.trim());
+    
+    // Keep only last 10 entries
+    db.prepare(`
+      DELETE FROM search_history 
+      WHERE user_id = ? AND id NOT IN (
+        SELECT id FROM search_history 
+        WHERE user_id = ? 
+        ORDER BY searched_at DESC LIMIT 10
+      )
+    `).run(req.user.sub, req.user.sub);
+    
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/history/:location', requireAuth, (req, res) => {
+  db.prepare(
+    'DELETE FROM search_history WHERE user_id = ? AND location = ?'
+  ).run(req.user.sub, req.params.location);
   res.json({ ok: true });
 });
 

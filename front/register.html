@@ -29,6 +29,12 @@
         <input id="password" type="password" autocomplete="new-password" required minlength="6" />
       </div>
 
+      <div class="form-field">
+        <label for="startAddress">Adresse de référence <span class="field-hint">(pour calcul des distances)</span></label>
+        <input id="startAddress" type="text" placeholder="Votre adresse (ex: 75011 Paris)" autocomplete="off" />
+        <div id="address-autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
+      </div>
+
       <button type="submit" id="submitBtn">Créer le compte</button>
 
       <p class="auth-switch">Déjà un compte ? <a href="login.html">Se connecter</a></p>
@@ -49,51 +55,184 @@
       }
 
       const form = document.getElementById('registerForm');
-    const errorEl = document.getElementById('authError');
-    const submitBtn = document.getElementById('submitBtn');
+      const errorEl = document.getElementById('authError');
+      const submitBtn = document.getElementById('submitBtn');
+      const startAddressInput = document.getElementById('startAddress');
+      let selectedAddress = null;
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      errorEl.classList.add('hidden');
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Création...';
+      // Initialize Google Places autocomplete for address field
+      function initAddressAutocomplete() {
+        if (typeof google === 'undefined' || !google.maps) return;
+        
+        const autocompleteService = new google.maps.places.AutocompleteService();
+        const placesService = new google.maps.places.PlacesService(document.createElement('div'));
+        const dropdown = document.getElementById('address-autocomplete-dropdown');
+        const IDF_CENTER = new google.maps.LatLng(48.8566, 2.3522);
+        let debounce = null;
 
-      const username = document.getElementById('username').value.trim();
-      const password = document.getElementById('password').value;
+        startAddressInput.addEventListener('input', () => {
+          const query = startAddressInput.value.trim();
+          if (!query) {
+            dropdown.classList.add('hidden');
+            selectedAddress = null;
+            return;
+          }
 
-      if (password.length < 6) {
-        errorEl.textContent = 'Le mot de passe doit contenir au moins 6 caractères';
-        errorEl.classList.remove('hidden');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Créer le compte';
-        return;
-      }
-
-      try {
-        const res = await fetch(`${API_URL}/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          clearTimeout(debounce);
+          debounce = setTimeout(() => {
+            autocompleteService.getPlacePredictions(
+              {
+                input: query,
+                location: IDF_CENTER,
+                radius: 80000,
+                componentRestrictions: { country: 'fr' },
+                types: ['address']
+              },
+              (predictions, status) => {
+                const preds = (status === google.maps.places.PlacesServiceStatus.OK && predictions) ? predictions : [];
+                renderDropdown(preds, query);
+              }
+            );
+          }, 300);
         });
 
-        const data = await res.json();
+        startAddressInput.addEventListener('focus', () => {
+          if (startAddressInput.value.trim()) {
+            startAddressInput.dispatchEvent(new Event('input'));
+          }
+        });
 
-        if (!res.ok) {
-          errorEl.textContent = data.error || 'Erreur lors de la création du compte';
+        startAddressInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            dropdown.classList.add('hidden');
+            selectedAddress = null;
+          }
+        });
+
+        function renderDropdown(predictions, query) {
+          dropdown.innerHTML = '';
+          
+          if (!predictions.length) {
+            dropdown.classList.add('hidden');
+            return;
+          }
+
+          predictions.slice(0, 5).forEach((pred) => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            const mainText = pred.structured_formatting?.main_text ?? pred.description;
+            const secText = pred.structured_formatting?.secondary_text ?? '';
+            item.innerHTML = `
+              <span class="ac-main">${highlightMatch(mainText, query)}</span>
+              <span class="ac-secondary">${escape(secText)}</span>
+            `;
+            item.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              selectPrediction(pred);
+            });
+            dropdown.appendChild(item);
+          });
+
+          dropdown.classList.remove('hidden');
+        }
+
+        function selectPrediction(pred) {
+          startAddressInput.value = pred.description;
+          selectedAddress = pred.description;
+          dropdown.classList.add('hidden');
+
+          placesService.getDetails(
+            { placeId: pred.place_id, fields: ['geometry'] },
+            (place, status) => {
+              // We just need the formatted address, coordinates will be geocoded on backend
+            }
+          );
+        }
+
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('.form-field')) {
+            dropdown.classList.add('hidden');
+          }
+        });
+      }
+
+      function highlightMatch(text, query) {
+        if (!query) return escape(text);
+        const idx = text.toLowerCase().indexOf(query.toLowerCase());
+        if (idx === -1) return escape(text);
+        return escape(text.slice(0, idx))
+          + `<mark class="ac-highlight">${escape(text.slice(idx, idx + query.length))}</mark>`
+          + escape(text.slice(idx + query.length));
+      }
+
+      function escape(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&')
+          .replace(/</g, '<')
+          .replace(/>/g, '>');
+      }
+
+      // Initialize autocomplete when Google Maps is loaded
+      if (typeof google !== 'undefined' && google.maps) {
+        initAddressAutocomplete();
+      } else {
+        const checkGoogle = setInterval(() => {
+          if (typeof google !== 'undefined' && google.maps) {
+            clearInterval(checkGoogle);
+            initAddressAutocomplete();
+          }
+        }, 500);
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorEl.classList.add('hidden');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Création...';
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const start_address = startAddressInput.value.trim() || null;
+
+        if (password.length < 6) {
+          errorEl.textContent = 'Le mot de passe doit contenir au moins 6 caractères';
           errorEl.classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Créer le compte';
           return;
         }
 
-        window.location.href = 'login.html';
-      } catch {
-        errorEl.textContent = 'Impossible de contacter le serveur';
-        errorEl.classList.remove('hidden');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Créer le compte';
-      }
+        try {
+          const res = await fetch(`${API_URL}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, start_address }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            errorEl.textContent = data.error || 'Erreur lors de la création du compte';
+            errorEl.classList.remove('hidden');
+            return;
+          }
+
+          window.location.href = 'login.html';
+        } catch {
+          errorEl.textContent = 'Impossible de contacter le serveur';
+          errorEl.classList.remove('hidden');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Créer le compte';
+        }
+      });
     });
-  });
   </script>
+  
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDu5OU_yf5-KHEWOvLHcfpDlWryJS-gHtk&libraries=places"
+    async
+    defer
+  ></script>
 </body>
 </html>
