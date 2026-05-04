@@ -557,18 +557,6 @@ app.delete('/parcours/:id', requireAuth, (req, res) => {
 
 // ─── Pipeline status route ──────────────────────────────────────────────────────
 
-J’ai un bug sur mon backend Node/Express concernant la mise à jour du pipeline status d’un prospect.
-
-Front : quand je change le statut dans le select, j’obtiens :
-
-Failed to load resource: 500 (Internal Server Error)
-puis Unexpected token '<', "<!DOCTYPE "... is not valid JSON
-
-Route concernée :
-PATCH /parcours/:id/status
-
-Code backend :
-
 app.patch('/parcours/:id/status', requireAuth, parseUserId, (req, res) => {
   const { pipeline_status } = req.body ?? {};
   const VALID_PIPELINE_STATUSES = ['new', 'contacted', 'interested', 'converted', 'refused'];
@@ -603,18 +591,6 @@ app.patch('/parcours/:id/status', requireAuth, parseUserId, (req, res) => {
   res.json({ ok: true });
 });
 
-Middleware :
-
-function parseUserId(req, res, next) {
-  const userId = Number(req.user.sub);
-  if (isNaN(userId)) {
-    return res.status(400).json({ error: 'ID utilisateur invalide' });
-  }
-  req.userId = userId;
-  next();
-}
-
-// ─── Actions routes ─────────────────────────────────────────────────────────────
 
 app.post('/actions', requireAuth, parseUserId, (req, res) => {
   const { prospect_id, type, content } = req.body ?? {};
