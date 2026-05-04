@@ -5,6 +5,17 @@ import cors from 'cors';
 import db from './src/db.js';
 import { cacheGet, cacheSet } from './src/cacheManager.js';
 import { hashPassword, verifyPassword, signToken, requireAuth, findUserByUsername, createUser } from './src/auth.js';
+
+// ─── Middleware: Parse User ID ──────────────────────────────────────────────────
+
+function parseUserId(req, res, next) {
+  const userId = Number(req.user.sub);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'ID utilisateur invalide' });
+  }
+  req.userId = userId;
+  next();
+}
 import { analyzeWebsite } from './src/enrich.js';
 import { computeScore, getScoreLabel, sortResults } from './src/score.js';
 import { promisePool } from './src/pool.js';
@@ -538,6 +549,104 @@ app.delete('/parcours/:id', requireAuth, (req, res) => {
 
   if (!result.changes) return res.status(404).json({ error: 'Non trouvé' });
   res.json({ ok: true });
+});
+
+// ─── Pipeline status route ──────────────────────────────────────────────────────
+
+app.patch('/parcours/:id/status', requireAuth, parseUserId, (req, res) => {
+  const { pipeline_status } = req.body ?? {};
+  const VALID_PIPELINE_STATUSES = ['new', 'contacted', 'interested', 'converted', 'refused'];
+
+  if (!pipeline_status) {
+    return res.status(400).json({ error: 'pipeline_status requis' });
+  }
+
+  if (!VALID_PIPELINE_STATUSES.includes(pipeline_status)) {
+    return res.status(400).json({ error: 'Statut pipeline invalide' });
+  }
+
+  const prospectId = req.params.id;
+  const userId = req.userId;
+
+  // Verify prospect belongs to user
+  const prospect = db.prepare(
+    'SELECT id, pipeline_status FROM parcours WHERE id = ? AND user_id = ?'
+  ).get(prospectId, userId);
+
+  if (!prospect) {
+    return res.status(404).json({ error: 'Prospect non trouvé' });
+  }
+
+  // Update pipeline status
+  db.prepare(
+    `UPDATE parcours SET pipeline_status = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
+  ).run(pipeline_status, prospectId, userId);
+
+  // Log action for status change
+  db.prepare(
+    `INSERT INTO actions (user_id, prospect_id, type, content) VALUES (?, ?, 'status_change', ?)`
+  ).run(userId, prospectId, `Statut changé vers ${pipeline_status}`);
+
+  res.json({ ok: true });
+});
+
+// ─── Actions routes ─────────────────────────────────────────────────────────────
+
+app.post('/actions', requireAuth, parseUserId, (req, res) => {
+  const { prospect_id, type, content } = req.body ?? {};
+  const VALID_ACTION_TYPES = ['call', 'sms', 'visit', 'note', 'status_change'];
+
+  if (!prospect_id) {
+    return res.status(400).json({ error: 'prospect_id requis' });
+  }
+
+  if (!type) {
+    return res.status(400).json({ error: 'type requis' });
+  }
+
+  if (!VALID_ACTION_TYPES.includes(type)) {
+    return res.status(400).json({ error: 'Type d\'action invalide' });
+  }
+
+  const userId = req.userId;
+
+  // Verify prospect belongs to user
+  const prospect = db.prepare(
+    'SELECT id FROM parcours WHERE id = ? AND user_id = ?'
+  ).get(prospect_id, userId);
+
+  if (!prospect) {
+    return res.status(404).json({ error: 'Prospect non trouvé' });
+  }
+
+  const result = db.prepare(
+    `INSERT INTO actions (user_id, prospect_id, type, content) VALUES (?, ?, ?, ?)`
+  ).run(userId, prospect_id, type, content ?? null);
+
+  res.json({ id: result.lastInsertRowid, created: true });
+});
+
+app.get('/actions/:prospectId', requireAuth, parseUserId, (req, res) => {
+  const prospectId = req.params.prospectId;
+  const userId = req.userId;
+
+  // Verify prospect belongs to user
+  const prospect = db.prepare(
+    'SELECT id FROM parcours WHERE id = ? AND user_id = ?'
+  ).get(prospectId, userId);
+
+  if (!prospect) {
+    return res.status(404).json({ error: 'Prospect non trouvé' });
+  }
+
+  const actions = db.prepare(
+    `SELECT id, user_id, prospect_id, type, content, created_at 
+     FROM actions 
+     WHERE prospect_id = ? AND user_id = ? 
+     ORDER BY created_at DESC`
+  ).all(prospectId, userId);
+
+  res.json({ actions });
 });
 
 // ─── Seen prospects routes ────────────────────────────────────────────────────

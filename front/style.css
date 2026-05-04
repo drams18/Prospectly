@@ -1261,6 +1261,21 @@ body.auth-page {
 
 .btn-delete:hover { background: var(--danger-text); color: #fff; }
 
+.btn-detail {
+  padding: 5px 10px;
+  background: var(--primary-light);
+  border: 1.5px solid var(--primary);
+  color: var(--primary);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-detail:hover { background: var(--primary); color: #fff; }
+
 /* ── Status-based card colors ────────────────────────────────────────────────── */
 /* À faire - neutral (gray/light blue) */
 .parcours-card.status-todo {
@@ -1295,6 +1310,261 @@ body.auth-page {
   box-shadow: 0 4px 16px rgba(220, 38, 38, 0.2);
   border-left-color: #b91c1c;
 }
+
+/* ── Pipeline status card colors ─────────────────────────────────────────────── */
+.parcours-card.pipeline-new {
+  border-left: 4px solid var(--text-muted);
+}
+
+.parcours-card.pipeline-contacted {
+  border-left: 4px solid #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+.parcours-card.pipeline-interested {
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.parcours-card.pipeline-converted {
+  border-left: 4px solid #10b981;
+  background: linear-gradient(135deg, #f0fdf4 0%, #d1fae5 100%);
+}
+
+.parcours-card.pipeline-refused {
+  border-left: 4px solid #ef4444;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+}
+
+/* Pipeline status badge */
+.pipeline-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.pipeline-badge.new { background: #f1f5f9; color: var(--text-secondary); }
+.pipeline-badge.contacted { background: #dbeafe; color: #1d4ed8; }
+.pipeline-badge.interested { background: #fef3c7; color: #b45309; }
+.pipeline-badge.converted { background: #d1fae5; color: #059669; }
+.pipeline-badge.refused { background: #fee2e2; color: #dc2626; }
+
+/* Pipeline status select */
+.pipeline-select {
+  padding: 5px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.pipeline-select:focus { outline: none; border-color: var(--primary); }
+
+/* ── Action history ───────────────────────────────────────────────────────────── */
+.action-history {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.action-history-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.action-item {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+.action-type {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.action-type.call { background: #dbeafe; color: #1d4ed8; }
+.action-type.sms { background: #dcfce7; color: #15803d; }
+.action-type.visit { background: #fef3c7; color: #b45309; }
+.action-type.note { background: #f1f5f9; color: var(--text-secondary); }
+.action-type.status_change { background: #e0e0e0; color: #424242; }
+
+.action-content {
+  flex: 1;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.action-time {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.action-empty {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* Add action form */
+.add-action-form {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.add-action-form input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+
+.add-action-form select {
+  padding: 6px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-family: inherit;
+  background: var(--surface);
+}
+
+.btn-add-action {
+  padding: 6px 12px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-add-action:hover { background: var(--primary-dark); }
+
+/* Prospect detail modal */
+.prospect-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.prospect-detail-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.prospect-detail-content {
+  position: relative;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-md);
+  border: 1.5px solid var(--border);
+}
+
+.prospect-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.prospect-detail-close {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  transition: color 0.15s;
+}
+
+.prospect-detail-close:hover { color: var(--text); }
+
+.prospect-detail-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.prospect-detail-address {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.prospect-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.prospect-detail-field {
+  display: flex;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.prospect-detail-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 80px;
+}
+
+.prospect-detail-value {
+  color: var(--text);
+}
+
+.prospect-detail-value a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.prospect-detail-value a:hover { text-decoration: underline; }
 
 /* ── Favorite card styling ───────────────────────────────────────────────────── */
 .parcours-card.favorite {

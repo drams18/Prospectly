@@ -76,6 +76,53 @@ ensureColumn('parcours', 'is_favorite', 'INTEGER DEFAULT 0');
 ensureColumn('parcours', 'lat', 'REAL');
 ensureColumn('parcours', 'lng', 'REAL');
 
+// ─── Pipeline status migration ──────────────────────────────────────────────────
+
+ensureColumn('parcours', 'pipeline_status', "TEXT CHECK(pipeline_status IN ('new','contacted','interested','converted','refused')) DEFAULT 'new'");
+
+// Migrate existing data: visit_status = 'visited' -> contacted, else new
+(function migratePipelineStatus() {
+  const colInfo = db.prepare("PRAGMA table_info('parcours')").all();
+  const hasPipelineStatus = colInfo.some(c => c.name === 'pipeline_status');
+  if (!hasPipelineStatus) return;
+  
+  // Check if migration is needed (any row with pipeline_status = 'new' and visit_status != 'pending')
+  const needsMigration = db.prepare(`
+    SELECT 1 FROM parcours WHERE pipeline_status = 'new' AND visit_status = 'visited' LIMIT 1
+  `).get();
+  
+  if (needsMigration) {
+    db.exec(`
+      UPDATE parcours 
+      SET pipeline_status = 'contacted' 
+      WHERE pipeline_status = 'new' AND visit_status = 'visited'
+    `);
+  }
+})();
+
+// ─── Actions table ──────────────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    prospect_id INTEGER NOT NULL REFERENCES parcours(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK(type IN ('call','sms','visit','note','status_change')),
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_actions_prospect 
+  ON actions(prospect_id, created_at DESC);
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_actions_user 
+  ON actions(user_id);
+`);
+
 // ─── Status migration: normalize to 'done' / 'not_done' only ────────────────────
 
 (function migrateStatus() {
