@@ -95,7 +95,9 @@ let userAddress      = null; // User's stored address from database
 
 const QUICK_SMS_SCRIPT = (prospect = {}) => {
   const name = prospect.name || "votre établissement";
-  const type = (prospect.types || []).join(' ').toLowerCase();
+  const type = Array.isArray(prospect.types)
+  ? prospect.types.join(' ').toLowerCase()
+  : '';
 
   let label = "commerces";
   if (type.includes('hair') || type.includes('beauty')) label = "salons";
@@ -108,7 +110,9 @@ const QUICK_SMS_SCRIPT = (prospect = {}) => {
 
 const QUICK_CALL_SCRIPT = (prospect = {}) => {
   const name = prospect.name || "votre établissement";
-  const type = (prospect.types || []).join(' ').toLowerCase();
+  const type = Array.isArray(prospect.types)
+  ? prospect.types.join(' ').toLowerCase()
+  : '';
 
   let label = "commerces";
   if (type.includes('hair') || type.includes('beauty')) label = "salons";
@@ -499,14 +503,16 @@ function renderDetail(s) {
 
     <div class="scripts-box">
       <div class="scripts-title">Scripts rapides</div>
+
       <div class="scripts-item">
         <div class="scripts-label">Appel</div>
-        <p>${escape(QUICK_CALL_SCRIPT)}</p>
+        <p>${escape(QUICK_CALL_SCRIPT(s))}</p>
         <button class="quick-btn secondary" id="copyCallScriptBtn">Copier</button>
       </div>
+
       <div class="scripts-item">
         <div class="scripts-label">SMS</div>
-        <p>${escape(QUICK_SMS_SCRIPT)}</p>
+        <p>${escape(QUICK_SMS_SCRIPT(s))}</p>
         <button class="quick-btn secondary" id="copySmsScriptBtn">Copier</button>
       </div>
     </div>
@@ -532,8 +538,8 @@ function renderDetail(s) {
   document.getElementById('addParcoursBtn')?.addEventListener('click', () => addToParcours(s));
   document.getElementById('copyPhoneBtn')?.addEventListener('click', () => copyToClipboard(s.phone || ''));
   document.getElementById('copySmsBtn')?.addEventListener('click', () => copyToClipboard(buildSmsMessage(s)));
-  document.getElementById('copyCallScriptBtn')?.addEventListener('click', () => copyToClipboard(QUICK_CALL_SCRIPT));
-  document.getElementById('copySmsScriptBtn')?.addEventListener('click', () => copyToClipboard(QUICK_SMS_SCRIPT));
+  document.getElementById('copyCallScriptBtn')?.addEventListener('click', () => copyToClipboard(QUICK_CALL_SCRIPT(s)));
+  document.getElementById('copySmsScriptBtn')?.addEventListener('click', () => copyToClipboard(QUICK_SMS_SCRIPT(s)));
 }
 
 // ─── Parcours ─────────────────────────────────────────────────────────────────
@@ -640,7 +646,9 @@ function buildSmsMessage(prospect) {
   const name = prospect.name || 'votre établissement';
 
   // Détection simple du type
-  const type = (prospect.types || []).join(' ').toLowerCase();
+  const type = Array.isArray(prospect.types)
+  ? prospect.types.join(' ').toLowerCase()
+  : '';
 
   let label = 'établissements';
 
@@ -666,9 +674,9 @@ async function copyToClipboard(text) {
 
 function escape(str) {
   return String(str ?? '')
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function highlightMatch(text, query) {
