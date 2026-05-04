@@ -275,7 +275,12 @@ async function updatePipelineStatus(id, pipelineStatus) {
 
     if (res.status === 401) Auth.logout();
     if (!res.ok) {
-      const error = await res.json();
+      let error;
+try {
+  error = await res.json();
+} catch {
+  error = { error: 'Erreur serveur inconnue' };
+}
       throw new Error(error.error || 'Erreur mise à jour statut');
     }
 
@@ -508,7 +513,12 @@ async function addAction() {
 
     if (res.status === 401) Auth.logout();
     if (!res.ok) {
-      const error = await res.json();
+      let error;
+try {
+  error = await res.json();
+} catch {
+  error = { error: 'Erreur serveur inconnue' };
+}
       throw new Error(error.error || 'Erreur ajout action');
     }
 

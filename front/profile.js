@@ -168,7 +168,12 @@ async function handleProfileUpdate(e) {
       });
 
       if (!res.ok) {
-        const error = await res.json();
+        let error;
+try {
+  error = await res.json();
+} catch {
+  error = { error: 'Erreur serveur inconnue' };
+}
         throw new Error(error.error || 'Erreur lors de la mise à jour du nom d\'utilisateur');
       }
 
@@ -247,7 +252,12 @@ async function deleteAccount() {
     });
 
     if (!res.ok) {
-      const error = await res.json();
+      let error;
+try {
+  error = await res.json();
+} catch {
+  error = { error: 'Erreur serveur inconnue' };
+}
       throw new Error(error.error || 'Erreur lors de la suppression du compte');
     }
 
