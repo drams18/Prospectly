@@ -557,43 +557,62 @@ app.delete('/parcours/:id', requireAuth, (req, res) => {
 
 // ─── Pipeline status route ──────────────────────────────────────────────────────
 
+J’ai un bug sur mon backend Node/Express concernant la mise à jour du pipeline status d’un prospect.
+
+Front : quand je change le statut dans le select, j’obtiens :
+
+Failed to load resource: 500 (Internal Server Error)
+puis Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+
+Route concernée :
+PATCH /parcours/:id/status
+
+Code backend :
+
 app.patch('/parcours/:id/status', requireAuth, parseUserId, (req, res) => {
-  try {
-    const { pipeline_status } = req.body ?? {};
+  const { pipeline_status } = req.body ?? {};
+  const VALID_PIPELINE_STATUSES = ['new', 'contacted', 'interested', 'converted', 'refused'];
 
-    const VALID = ['new', 'contacted', 'interested', 'converted', 'refused'];
-
-    if (!VALID.includes(pipeline_status)) {
-      return res.status(400).json({ error: 'Statut invalide' });
-    }
-
-    const prospectId = Number(req.params.id);
-    const userId = req.userId;
-
-    const prospect = db.prepare(
-      'SELECT id FROM parcours WHERE id = ? AND user_id = ?'
-    ).get(prospectId, userId);
-
-    if (!prospect) {
-      return res.status(404).json({ error: 'Prospect introuvable' });
-    }
-
-    db.prepare(
-      `UPDATE parcours SET pipeline_status = ?, updated_at = datetime('now')
-       WHERE id = ? AND user_id = ?`
-    ).run(pipeline_status, prospectId, userId);
-
-    db.prepare(
-      `INSERT INTO actions (user_id, prospect_id, type, content)
-       VALUES (?, ?, 'status_change', ?)`
-    ).run(userId, prospectId, `Statut changé vers ${pipeline_status}`);
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('PIPELINE ERROR:', err);
-    res.status(500).json({ error: 'Erreur serveur pipeline' });
+  if (!pipeline_status) {
+    return res.status(400).json({ error: 'pipeline_status requis' });
   }
+
+  if (!VALID_PIPELINE_STATUSES.includes(pipeline_status)) {
+    return res.status(400).json({ error: 'Statut pipeline invalide' });
+  }
+
+  const prospectId = req.params.id;
+  const userId = req.userId;
+
+  const prospect = db.prepare(
+    'SELECT id, pipeline_status FROM parcours WHERE id = ? AND user_id = ?'
+  ).get(prospectId, userId);
+
+  if (!prospect) {
+    return res.status(404).json({ error: 'Prospect non trouvé' });
+  }
+
+  db.prepare(
+    `UPDATE parcours SET pipeline_status = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
+  ).run(pipeline_status, prospectId, userId);
+
+  db.prepare(
+    `INSERT INTO actions (user_id, prospect_id, type, content) VALUES (?, ?, 'status_change', ?)`
+  ).run(userId, prospectId, `Statut changé vers ${pipeline_status}`);
+
+  res.json({ ok: true });
 });
+
+Middleware :
+
+function parseUserId(req, res, next) {
+  const userId = Number(req.user.sub);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'ID utilisateur invalide' });
+  }
+  req.userId = userId;
+  next();
+}
 
 // ─── Actions routes ─────────────────────────────────────────────────────────────
 
