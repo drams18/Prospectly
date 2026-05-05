@@ -75,6 +75,11 @@ ensureColumn('parcours', 'visit_status', "TEXT CHECK(visit_status IN ('pending',
 ensureColumn('parcours', 'is_favorite', 'INTEGER DEFAULT 0');
 ensureColumn('parcours', 'lat', 'REAL');
 ensureColumn('parcours', 'lng', 'REAL');
+ensureColumn('parcours', 'has_booking', 'INTEGER');
+ensureColumn('parcours', 'booking_type', 'TEXT');
+ensureColumn('parcours', 'has_instagram', 'INTEGER');
+ensureColumn('parcours', 'is_hot', 'INTEGER');
+ensureColumn('parcours', 'wasted_potential', 'INTEGER');
 
 // ─── Pipeline status migration ──────────────────────────────────────────────────
 

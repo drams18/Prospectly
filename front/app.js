@@ -54,10 +54,11 @@ const mobileOverlay         = document.getElementById('mobileOverlay');
 const mobileOverlayContent  = document.getElementById('mobileOverlayContent');
 const mobileOverlayClose    = document.getElementById('mobileOverlayClose');
 const mobileOverlayBackdrop = document.getElementById('mobileOverlayBackdrop');
-const filterNoWebsite = document.getElementById('filterNoWebsite');
-const filterMinRating = document.getElementById('filterMinRating');
-const filterCategory = document.getElementById('filterCategory');
-const filterMinScore = document.getElementById('filterMinScore');
+const filterNoWebsite  = document.getElementById('filterNoWebsite');
+const filterNoBooking  = document.getElementById('filterNoBooking');
+const filterMinRating  = document.getElementById('filterMinRating');
+const filterMinReviews = document.getElementById('filterMinReviews');
+const filterOnlyHot    = document.getElementById('filterOnlyHot');
 
 function isMobile() {
   return window.innerWidth <= 640;
@@ -271,7 +272,16 @@ async function search() {
   toolbarEl.classList.add('hidden');
 
   try {
-    const body = { location, mode: 'single', businessType };
+    const body = {
+      location,
+      mode: 'single',
+      businessType,
+      ...(filterNoWebsite?.checked && { hasWebsite: false }),
+      ...(filterNoBooking?.checked  && { hasBooking: false }),
+      ...(filterOnlyHot?.checked    && { onlyHot: true }),
+      minRating:  Number(filterMinRating?.value  || 0),
+      minReviews: Number(filterMinReviews?.value || 0),
+    };
     if (searchLat != null && searchLng != null) {
       body.lat = searchLat;
       body.lng = searchLng;
@@ -313,7 +323,7 @@ function renderResults() {
     return;
   }
 
-  displayedResults = applyFilters(currentResults);
+  displayedResults = currentResults;
   if (!displayedResults.length) {
     resultCountEl.textContent = '0 prospect trouve';
     toolbarEl.classList.remove('hidden');
@@ -341,12 +351,11 @@ function renderResults() {
         <div class="card-body">
           <div class="card-status-line">
             <span class="tag score-label ${s.scoreLabel || 'low'}">${scoreLabelText(s.scoreLabel)}</span>
-            <span class="tag web-health ${siteHealthClass(s)}">${siteHealthText(s)}</span>
           </div>
           <div class="card-address">${escape(s.address)}</div>
           <div class="card-meta">
             ${isSeen ? '<span class="badge-seen">Déjà vue</span>' : ''}
-            ${webTag(s)}
+            ${prospectBadges(s)}
             ${s.rating ? `<span class="tag rating">★ ${s.rating}</span>` : ''}
             ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
             ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
@@ -487,8 +496,7 @@ function renderDetail(s) {
     </div>
 
     <div class="detail-meta">
-      ${webTag(s)}
-      <span class="tag web-health ${siteHealthClass(s)}">${siteHealthText(s)}</span>
+      ${prospectBadges(s)}
       ${s.rating  ? `<span class="tag rating">★ ${s.rating}</span>`     : ''}
       ${s.reviews ? `<span class="tag reviews">${s.reviews} avis</span>` : ''}
       ${s.distance != null ? `<span class="tag distance">${formatDistance(s.distance)}</span>` : ''}
@@ -565,9 +573,14 @@ async function addToParcours(prospect) {
         google_maps_url: prospect.googleMapsUrl,
         notes: '',
         visit_status: 'pending',
-        status: 'not_done', // Default status: non fait
+        status: 'not_done',
         lat: prospect.lat,
         lng: prospect.lng,
+        has_booking: prospect.hasBooking,
+        booking_type: prospect.bookingType,
+        has_instagram: prospect.hasInstagram,
+        is_hot: prospect.isHot,
+        wasted_potential: prospect.wastedPotential,
       }),
     });
 
@@ -587,17 +600,18 @@ async function addToParcours(prospect) {
 // ─── Tags & utils ─────────────────────────────────────────────────────────────
 
 function scorePriority(score) {
-  if (score >= 60) return 'high';
-  if (score >= 35) return 'medium';
+  if (score >= 80) return 'high';
+  if (score >= 50) return 'medium';
   return 'low';
 }
 
-function webTag(s) {
-  if (!s.website) return `<span class="tag no-site">🔴 Pas de site</span>`;
-  if (s.siteHealth === 'weak' || s.isBadSite) return `<span class="tag bad-site">🟠 Site faible</span>`;
-  if (s.siteHealth === 'improvable') return `<span class="tag platform">⚠️ Site a ameliorer</span>`;
-  if (s.platforms?.length) return `<span class="tag platform">${s.platforms.join(', ')}</span>`;
-  return `<span class="tag has-site">🟢 Site propre</span>`;
+function prospectBadges(s) {
+  const badges = [];
+  if (!s.website)        badges.push(`<span class="tag no-site">Pas de site</span>`);
+  if (!s.hasBooking)     badges.push(`<span class="tag no-booking">Pas de réservation</span>`);
+  if (s.hasInstagram)    badges.push(`<span class="tag instagram">Instagram</span>`);
+  if (s.wastedPotential) badges.push(`<span class="tag wasted">Potentiel perdu</span>`);
+  return badges.join('');
 }
 
 function formatDistance(meters) {
@@ -606,38 +620,9 @@ function formatDistance(meters) {
 }
 
 function scoreLabelText(label) {
-  if (label === 'opportunity') return 'Opportunite';
+  if (label === 'hot') return '🔥 Chaud';
   if (label === 'medium') return 'Moyen';
   return 'Faible';
-}
-
-function siteHealthText(s) {
-  if (!s.website) return 'Pas de site';
-  if (s.siteHealth === 'weak' || s.isBadSite) return 'Site faible';
-  if (s.siteHealth === 'improvable') return 'Site a ameliorer';
-  return 'OK';
-}
-
-function siteHealthClass(s) {
-  if (!s.website) return 'weak';
-  if (s.siteHealth === 'weak' || s.isBadSite) return 'weak';
-  if (s.siteHealth === 'improvable') return 'improvable';
-  return 'correct';
-}
-
-function applyFilters(results) {
-  const noWebsiteOnly = filterNoWebsite?.checked;
-  const minRating = Number(filterMinRating?.value || 0);
-  const minScore = Number(filterMinScore?.value || 0);
-  const category = (filterCategory?.value || '').trim().toLowerCase();
-
-  return results.filter((item) => {
-    if (noWebsiteOnly && item.website) return false;
-    if (minRating > 0 && (item.rating ?? 0) < minRating) return false;
-    if (minScore > 0 && (item.score ?? 0) < minScore) return false;
-    if (category && !item.name.toLowerCase().includes(category)) return false;
-    return true;
-  });
 }
 
 function buildSmsMessage(prospect) {
@@ -714,11 +699,12 @@ queryInput.addEventListener('input', updateSearchButtonState);
 // Init état bouton au chargement
 document.addEventListener('DOMContentLoaded', updateSearchButtonState);
 
-// Filtres
-filterNoWebsite?.addEventListener('change', renderResults);
-filterMinRating?.addEventListener('input', renderResults);
-filterMinScore?.addEventListener('input', renderResults);
-filterCategory?.addEventListener('input', renderResults);
+// Filtres — re-déclenche la recherche (les résultats sont filtrés côté backend sur le cache)
+filterNoWebsite?.addEventListener('change',  () => { if (currentResults.length) search(); });
+filterNoBooking?.addEventListener('change',  () => { if (currentResults.length) search(); });
+filterOnlyHot?.addEventListener('change',    () => { if (currentResults.length) search(); });
+filterMinRating?.addEventListener('change',  () => { if (currentResults.length) search(); });
+filterMinReviews?.addEventListener('change', () => { if (currentResults.length) search(); });
 
 // ─── Autocomplete + History (Île-de-France priority) ─────────────────────────
 

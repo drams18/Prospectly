@@ -21,7 +21,7 @@ function parseUserId(req, res, next) {
   next();
 }
 import { analyzeWebsite } from './src/enrich.js';
-import { computeScore, getScoreLabel, sortResults } from './src/score.js';
+import { detectBooking, detectInstagram, computeScore, getScoreLabel, computeFlags, sortResults, applySearchFilters } from './src/score.js';
 import { promisePool } from './src/pool.js';
 import { geocodeAddress } from './src/geocode.js';
 import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, computeAdaptiveRadii } from './src/places.js';
@@ -257,6 +257,12 @@ app.post('/search', async (req, res) => {
     businessType = '',
     keywords = [],
     mode = 'single',
+    hasWebsite,
+    hasBooking: filterHasBooking,
+    minRating = 0,
+    minReviews = 0,
+    category = '',
+    onlyHot = false,
   } = req.body ?? {};
   const normalizedBusinessType = businessType.trim().toLowerCase();
   const effectiveType = (normalizedBusinessType || query || '').trim();
@@ -296,7 +302,9 @@ app.post('/search', async (req, res) => {
 
     const cached = cacheGet(cacheKey);
     if (cached) {
-      return res.json({ results: cached, meta: cached.__meta ?? null });
+      const filters = { hasWebsite, hasBooking: filterHasBooking, minRating, minReviews, category, onlyHot };
+      const filtered = applySearchFilters(cached, filters);
+      return res.json({ results: filtered, meta: { mode, total: filtered.length, totalUnfiltered: cached.length } });
     }
 
     // Collect raw places (deduplicated by place_id)
@@ -309,10 +317,10 @@ app.post('/search', async (req, res) => {
       locationText: location.trim(),
       businessType: normalizedBusinessType,
     });
-    const filtered = rawPlaces.filter(p => !isFranchise(p.name ?? ''));
+    const noFranchise = rawPlaces.filter(p => !isFranchise(p.name ?? ''));
 
     // Parallel enrichment (max 5 concurrent)
-    const tasks = filtered.map(place => async () => {
+    const tasks = noFranchise.map(place => async () => {
       try {
         const details = await getPlaceDetails(place.place_id);
         if (!details) return null;
@@ -331,44 +339,35 @@ app.post('/search', async (req, res) => {
     
         const photoReference = photo?.photo_reference ?? null;
     
-        // ⚡ FAST MODE : pas de scraping ici
-        const hasWebsite = !!details.website;
-    
+        const website = details.website ?? null;
+        const { hasBooking, bookingType } = detectBooking(website);
+        const hasInstagram = detectInstagram(website);
+
         const lead = {
           name: details.name ?? place.name,
           address: details.formatted_address ?? place.vicinity ?? '',
           phone: details.formatted_phone_number ?? null,
           rating: details.rating ?? place.rating ?? null,
           reviews: details.user_ratings_total ?? place.user_ratings_total ?? 0,
-    
-          // simplifié
-          website: details.website ?? null,
-          hasWebsite,
-    
-          platforms: [],
-          isBadSite: false,
-          badSiteReasons: [],
-          siteHealth: hasWebsite ? 'unknown' : 'none',
-    
-          siteQuality: null,
-          responseTime: null,
-          hasHttps: details.website?.startsWith('https') ?? false,
-          hasMetaTitle: null,
-          hasViewport: null,
-          mobileReachable: null,
-    
+
+          website,
+          hasWebsite: !!website,
+          hasBooking,
+          bookingType,
+          hasInstagram,
+
           googleMapsUrl:
             details.url ??
             `https://maps.google.com/?q=${encodeURIComponent(details.name ?? place.name)}`,
-    
+
           imageUrl: buildGooglePlacePhotoUrl(photoReference),
           distance,
         };
-    
-        // ⚡ score rapide (sans analyse site)
+
         const score = computeScore(lead);
-    
-        return { ...lead, score, scoreLabel: getScoreLabel(score) };
+        const flags = computeFlags(lead);
+
+        return { ...lead, score, scoreLabel: getScoreLabel(score), ...flags };
     
       } catch {
         return null;
@@ -377,17 +376,21 @@ app.post('/search', async (req, res) => {
 
     const enriched = (await promisePool(tasks, 5)).filter(Boolean);
     const sorted = sortResults(enriched);
+    cacheSet(cacheKey, sorted);
+
+    const filters = { hasWebsite, hasBooking: filterHasBooking, minRating, minReviews, category, onlyHot };
+    const filtered = applySearchFilters(sorted, filters);
 
     const meta = {
       mode,
-      total: sorted.length,
+      total: filtered.length,
+      totalUnfiltered: sorted.length,
       ...(mode === 'scan' && { niches: SCAN_NICHES }),
       ...(mode === 'single' && { businessType: effectiveType || null, radii: adaptiveRadii }),
       ...(mode === 'multi' && { keywords }),
     };
 
-    cacheSet(cacheKey, sorted);
-    res.json({ results: sorted, meta });
+    res.json({ results: filtered, meta });
   } catch (err) {
     console.error('[/search]', err.message);
     res.status(500).json({ error: err.message });
@@ -397,12 +400,13 @@ app.post('/search', async (req, res) => {
 // ─── Parcours routes ──────────────────────────────────────────────────────────
 
 app.post('/parcours/add', requireAuth, (req, res) => {
-  const { 
-    name, address, phone, score, website, rating, reviews, 
+  const {
+    name, address, phone, score, website, rating, reviews,
     google_maps_url, notes = '', visit_status = 'pending',
-    lat, lng 
+    lat, lng,
+    has_booking, booking_type, has_instagram, is_hot, wasted_potential,
   } = req.body ?? {};
-  
+
   if (!name?.trim()) return res.status(400).json({ error: 'name requis' });
 
   const normalizedVisitStatus = ['pending', 'visited', 'absent'].includes(visit_status) ? visit_status : 'pending';
@@ -414,22 +418,34 @@ app.post('/parcours/add', requireAuth, (req, res) => {
     db.prepare(
       `UPDATE parcours
        SET phone = ?, score = ?, website = ?, rating = ?, reviews = ?, google_maps_url = ?,
-           notes = ?, visit_status = ?, lat = ?, lng = ?, updated_at = datetime('now')
+           notes = ?, visit_status = ?, lat = ?, lng = ?,
+           has_booking = ?, booking_type = ?, has_instagram = ?, is_hot = ?, wasted_potential = ?,
+           updated_at = datetime('now')
        WHERE id = ? AND user_id = ?`
     ).run(
       phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null, google_maps_url ?? null,
-      notes ?? '', normalizedVisitStatus, lat ?? null, lng ?? null, existing.id, req.user.sub
+      notes ?? '', normalizedVisitStatus, lat ?? null, lng ?? null,
+      has_booking != null ? (has_booking ? 1 : 0) : null,
+      booking_type ?? null,
+      has_instagram != null ? (has_instagram ? 1 : 0) : null,
+      is_hot != null ? (is_hot ? 1 : 0) : null,
+      wasted_potential != null ? (wasted_potential ? 1 : 0) : null,
+      existing.id, req.user.sub
     );
     return res.json({ id: existing.id, updated: true });
   }
 
-  // New parcours items start with status 'not_done' by default
   const result = db.prepare(
-    `INSERT INTO parcours (user_id, name, address, phone, score, website, rating, reviews, google_maps_url, notes, visit_status, status, lat, lng)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_done', ?, ?)`
+    `INSERT INTO parcours (user_id, name, address, phone, score, website, rating, reviews, google_maps_url, notes, visit_status, status, lat, lng, has_booking, booking_type, has_instagram, is_hot, wasted_potential)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_done', ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     req.user.sub, name.trim(), address ?? null, phone ?? null, score ?? null, website ?? null, rating ?? null, reviews ?? null,
-    google_maps_url ?? null, notes ?? '', normalizedVisitStatus, lat ?? null, lng ?? null
+    google_maps_url ?? null, notes ?? '', normalizedVisitStatus, lat ?? null, lng ?? null,
+    has_booking != null ? (has_booking ? 1 : 0) : null,
+    booking_type ?? null,
+    has_instagram != null ? (has_instagram ? 1 : 0) : null,
+    is_hot != null ? (is_hot ? 1 : 0) : null,
+    wasted_potential != null ? (wasted_potential ? 1 : 0) : null,
   );
 
   res.json({ id: result.lastInsertRowid, created: true });

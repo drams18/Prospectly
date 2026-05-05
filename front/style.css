@@ -535,19 +535,18 @@ header p {
   font-weight: 600;
 }
 
-.tag.no-site  { background: var(--success-bg);   color: var(--success-text); }
-.tag.platform { background: var(--warning-bg);   color: var(--warning-text); }
-.tag.has-site { background: #f1f5f9;             color: var(--text-secondary); }
-.tag.rating   { background: var(--info-bg);      color: var(--info-text); }
-.tag.reviews  { background: #f1f5f9;             color: var(--text-secondary); }
-.tag.distance { background: var(--primary-light); color: var(--primary); }
-.tag.bad-site { background: var(--warning-bg);   color: var(--warning-text); }
-.tag.score-label.opportunity { background: #fee2e2; color: #b91c1c; }
+.tag.no-site    { background: var(--success-bg);   color: var(--success-text); }
+.tag.no-booking { background: #fce7f3;             color: #9d174d; }
+.tag.instagram  { background: #ede9fe;             color: #6d28d9; }
+.tag.wasted     { background: var(--danger-bg);    color: var(--danger-text); }
+.tag.rating     { background: var(--info-bg);      color: var(--info-text); }
+.tag.reviews    { background: #f1f5f9;             color: var(--text-secondary); }
+.tag.distance   { background: var(--primary-light); color: var(--primary); }
+.tag.score-label.hot    { background: #fee2e2; color: #b91c1c; font-weight: 700; }
 .tag.score-label.medium { background: var(--warning-bg); color: var(--warning-text); }
-.tag.score-label.low { background: #e2e8f0; color: var(--text-secondary); }
-.tag.web-health.weak { background: #fee2e2; color: #b91c1c; }
-.tag.web-health.improvable { background: #fef3c7; color: #b45309; }
-.tag.web-health.correct { background: #dcfce7; color: #15803d; }
+.tag.score-label.low    { background: #e2e8f0; color: var(--text-secondary); }
+
+.filter-inline.hot-filter { font-weight: 600; }
 
 /* ── Detail panel ───────────────────────────────────────────────────────────── */
 .detail-panel {
