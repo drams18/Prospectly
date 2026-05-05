@@ -24,7 +24,9 @@ import { analyzeWebsite } from './src/enrich.js';
 import { detectBooking, detectInstagram, computeScore, getScoreLabel, computeFlags, sortResults, applySearchFilters } from './src/score.js';
 import { promisePool } from './src/pool.js';
 import { geocodeAddress } from './src/geocode.js';
-import { searchPlaces, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, computeAdaptiveRadii } from './src/places.js';
+import { searchPlaces, searchPlacesCount, getPlaceDetails, haversineDistance, isFranchise, SCAN_NICHES, computeAdaptiveRadii } from './src/places.js';
+import { isAllowedBusiness } from './src/filters.js';
+import { CATEGORY_GROUPS } from './src/categories.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -263,6 +265,7 @@ app.post('/search', async (req, res) => {
     minReviews = 0,
     category = '',
     onlyHot = false,
+    categoryCounts = false,
   } = req.body ?? {};
   const normalizedBusinessType = businessType.trim().toLowerCase();
   const effectiveType = (normalizedBusinessType || query || '').trim();
@@ -273,11 +276,13 @@ app.post('/search', async (req, res) => {
   if (!process.env.GOOGLE_MAPS_API_KEY) {
     return res.status(500).json({ error: 'GOOGLE_MAPS_API_KEY manquante dans .env' });
   }
-  if (mode === 'multi' && (!Array.isArray(keywords) || keywords.length === 0)) {
-    return res.status(400).json({ error: 'keywords[] requis pour le mode multi' });
-  }
-  if (!['single', 'multi', 'scan'].includes(mode)) {
-    return res.status(400).json({ error: "mode doit être 'single', 'multi' ou 'scan'" });
+  if (!categoryCounts) {
+    if (mode === 'multi' && (!Array.isArray(keywords) || keywords.length === 0)) {
+      return res.status(400).json({ error: 'keywords[] requis pour le mode multi' });
+    }
+    if (!['single', 'multi', 'scan'].includes(mode)) {
+      return res.status(400).json({ error: "mode doit être 'single', 'multi' ou 'scan'" });
+    }
   }
 
   try {
@@ -291,6 +296,27 @@ app.post('/search', async (req, res) => {
 
     const fallbackRadius = parseInt(process.env.SEARCH_RADIUS || '2000');
     const adaptiveRadii = computeAdaptiveRadii(location.trim(), fallbackRadius);
+
+    // ─── CATEGORY COUNTS ──────────────────────────────────────────────────────
+    if (categoryCounts) {
+      const countsCacheKey = `counts_${searchLat.toFixed(4)}_${searchLng.toFixed(4)}`;
+      const cachedCounts = cacheGet(countsCacheKey);
+      if (cachedCounts) return res.json({ counts: cachedCounts });
+
+      const allCategories = CATEGORY_GROUPS.flatMap(g => g.categories);
+      const countTasks = allCategories.map(cat => async () => {
+        const places = await searchPlacesCount({
+          lat: searchLat, lng: searchLng,
+          radius: fallbackRadius,
+          keywords: cat.keywords,
+        });
+        return [cat.id, places.filter(p => isAllowedBusiness(p)).length];
+      });
+      const countEntries = await promisePool(countTasks, 4);
+      const counts = Object.fromEntries(countEntries);
+      cacheSet(countsCacheKey, counts);
+      return res.json({ counts });
+    }
 
     // Cache key encodes the full search intent
     const cacheKeyParts = mode === 'scan'
@@ -324,21 +350,27 @@ app.post('/search', async (req, res) => {
       try {
         const details = await getPlaceDetails(place.place_id);
         if (!details) return null;
-    
+
+        // ─── HALAL FILTER (before scoring and cache) ───────────────────────────
+        if (!isAllowedBusiness({
+          name: details.name ?? place.name,
+          types: details.types ?? place.types,
+        })) return null;
+
         const placeLat = details.geometry?.location?.lat ?? place.geometry?.location?.lat;
         const placeLng = details.geometry?.location?.lng ?? place.geometry?.location?.lng;
-    
+
         const distance = (placeLat != null && placeLng != null)
           ? haversineDistance(searchLat, searchLng, placeLat, placeLng)
           : null;
-    
+
         const photo =
           details.photos?.[0] ||
           place.photos?.[0] ||
           null;
-    
+
         const photoReference = photo?.photo_reference ?? null;
-    
+
         const website = details.website ?? null;
         const { hasBooking, bookingType } = detectBooking(website);
         const hasInstagram = detectInstagram(website);
@@ -362,13 +394,14 @@ app.post('/search', async (req, res) => {
 
           imageUrl: buildGooglePlacePhotoUrl(photoReference),
           distance,
+          _filteredBy: 'halal-system',
         };
 
         const score = computeScore(lead);
         const flags = computeFlags(lead);
 
         return { ...lead, score, scoreLabel: getScoreLabel(score), ...flags };
-    
+
       } catch {
         return null;
       }

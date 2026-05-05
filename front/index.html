@@ -17,70 +17,44 @@
 
     <header>
       <h1>Prospectly</h1>
-      <p>Trouvez des businesses sans site web à prospecter</p>
+      <p>Choisissez une zone, explorez les opportunités par secteur</p>
     </header>
 
-<div class="search-bar">
-  <form id="searchForm" class="search-row">
-    <div class="input-wrapper">
-      <input
-        id="locationInput"
-        type="text"
-        placeholder="Localisation (adresse, quartier, 75011, Paris 11e...)"
-        autofocus
-        autocomplete="off"
-      />
-      <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
+    <div class="search-bar">
+      <form id="searchForm" class="search-row">
+        <div class="input-wrapper">
+          <input
+            id="locationInput"
+            type="text"
+            placeholder="Ville, quartier, code postal (ex: Paris 11e, Bastille…)"
+            autofocus
+            autocomplete="off"
+          />
+          <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
+        </div>
+        <button id="searchBtn" type="submit" disabled>Explorer la zone</button>
+      </form>
     </div>
-    <input
-      id="queryInput"
-      type="text"
-      placeholder="Type d'enseigne (restaurant, coiffeur, garage...)"
-      class="query-input"
-    />
-    <datalist id="businessTypeSuggestions">
-      <option value="restaurant"></option>
-      <option value="coiffeur"></option>
-      <option value="garage"></option>
-      <option value="boutique"></option>
-      <option value="boulangerie"></option>
-      <option value="pharmacie"></option>
-    </datalist>
-    <button id="searchBtn" type="submit" disabled>Rechercher</button>
-  </form>
-  <div class="filters-row">
-    <label class="filter-inline">
-      <input type="checkbox" id="filterNoWebsite" />
-      Pas de site
-    </label>
-    <label class="filter-inline">
-      <input type="checkbox" id="filterNoBooking" />
-      Pas de réservation
-    </label>
-    <label class="filter-inline">
-      Avis min
-      <input type="number" id="filterMinReviews" min="0" step="1" placeholder="0" />
-    </label>
-    <label class="filter-inline">
-      Note min
-      <input type="number" id="filterMinRating" min="0" max="5" step="0.1" placeholder="0" />
-    </label>
-    <label class="filter-inline hot-filter">
-      <input type="checkbox" id="filterOnlyHot" />
-      🔥 Chauds uniquement
-    </label>
-  </div>
-</div>
 
     <div id="status" class="status hidden"></div>
 
     <div id="toolbar" class="toolbar hidden">
       <span id="resultCount"></span>
+      <span id="activeCategoryLabel" class="active-category-label"></span>
     </div>
 
-    <div class="results-layout">
-      <div id="results" class="results-list"></div>
-      <div id="detailPanel" class="detail-panel hidden"></div>
+    <button id="mobileCatsBtn" class="mobile-cats-btn hidden">
+      Catégories <span class="mobile-cats-arrow">▾</span>
+    </button>
+
+    <div class="app-layout">
+      <aside id="categorySidebar" class="category-sidebar hidden"></aside>
+      <div class="main-content">
+        <div class="results-layout">
+          <div id="results" class="results-list"></div>
+          <div id="detailPanel" class="detail-panel hidden"></div>
+        </div>
+      </div>
     </div>
   </div>
 

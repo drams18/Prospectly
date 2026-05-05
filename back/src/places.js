@@ -251,3 +251,25 @@ export function isFranchise(name) {
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Lightweight count-only search: one nearbySearch page per keyword, no getPlaceDetails
+export async function searchPlacesCount({ lat, lng, radius, keywords }) {
+  const seen = new Map();
+  const terms = keywords.slice(0, 2); // limit API calls per category
+  const tasks = terms.map(kw => async () => {
+    try { return await nearbySearchOnce({ lat, lng, radius, keyword: kw }); }
+    catch { return []; }
+  });
+  const batches = await promisePool(tasks, 4);
+  for (const batch of batches) for (const place of batch) seen.set(place.place_id, place);
+  return [...seen.values()].filter(p => !isFranchise(p.name ?? ''));
+}
+
+async function nearbySearchOnce({ lat, lng, radius, keyword }) {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const params = { location: `${lat},${lng}`, radius, key: apiKey, language: 'fr' };
+  if (keyword) params.keyword = keyword;
+  const { data } = await axios.get(`${PLACES_BASE}/nearbysearch/json`, { params });
+  if (!['OK', 'ZERO_RESULTS'].includes(data.status)) return [];
+  return data.results || [];
+}

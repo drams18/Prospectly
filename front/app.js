@@ -1,41 +1,28 @@
-// ─── Auth Guard — wrapped in DOMContentLoaded to prevent early execution ──────
-// IMPORTANT: This MUST be inside DOMContentLoaded to avoid execution before DOM ready
-// Uses replace() to prevent back-button infinite loop
-
+// ─── Auth Guard ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
-  // Single auth guard - executed only once when DOM is ready
   if (typeof Auth !== 'undefined') {
     const isLoginPage = window.location.pathname.includes('login.html');
     const token = Auth.getToken();
     const expired = Auth.isExpired();
 
     if ((!token || expired) && !isLoginPage) {
-      // Use replace() to prevent back-button redirect loop
       window.location.replace('/Prospectly/login.html');
-      return; // Stop execution after redirect
+      return;
     }
 
-    // Setup auth bar only if user is authenticated
     if (token && !expired) {
       const usernameDisplay = document.getElementById('usernameDisplay');
       const logoutBtn = document.getElementById('logoutBtn');
-      
-      if (usernameDisplay) {
-        usernameDisplay.textContent = Auth.getUsername() ?? '';
-      }
-      if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => Auth.logout());
-      }
+      if (usernameDisplay) usernameDisplay.textContent = Auth.getUsername() ?? '';
+      if (logoutBtn) logoutBtn.addEventListener('click', () => Auth.logout());
     }
   }
 });
 
-// Auth bar setup will be done inside DOMContentLoaded above
+const locationInput   = document.getElementById('locationInput');
+const searchBtn       = document.getElementById('searchBtn');
+const searchForm      = document.getElementById('searchForm');
 
-const locationInput    = document.getElementById('locationInput');
-const searchBtn        = document.getElementById('searchBtn');
-const searchForm       = document.getElementById('searchForm');
-const queryInput = document.getElementById('queryInput');
 const arrondissementSuggestions = Array.from({ length: 20 }, (_, i) => {
   const n = i + 1;
   return `750${String(n).padStart(2, '0')} Paris ${n}${n === 1 ? 'er' : 'e'}`;
@@ -54,14 +41,46 @@ const mobileOverlay         = document.getElementById('mobileOverlay');
 const mobileOverlayContent  = document.getElementById('mobileOverlayContent');
 const mobileOverlayClose    = document.getElementById('mobileOverlayClose');
 const mobileOverlayBackdrop = document.getElementById('mobileOverlayBackdrop');
-const filterNoWebsite  = document.getElementById('filterNoWebsite');
-const filterNoBooking  = document.getElementById('filterNoBooking');
-const filterMinRating  = document.getElementById('filterMinRating');
-const filterMinReviews = document.getElementById('filterMinReviews');
-const filterOnlyHot    = document.getElementById('filterOnlyHot');
+
+// ─── Category groups (mirrors back/src/categories.js) ─────────────────────────
+const CATEGORY_GROUPS = [
+  {
+    id: 'beaute', label: 'BEAUTÉ',
+    categories: [
+      { id: 'barbier',    label: 'Barbier',    keywords: ['barbier', 'barber', 'barbershop'] },
+      { id: 'coiffeur',   label: 'Coiffeur',   keywords: ['coiffeur', 'salon de coiffure'] },
+      { id: 'onglerie',   label: 'Onglerie',   keywords: ['onglerie', 'nail salon', 'manucure'] },
+      { id: 'esthetique', label: 'Esthétique', keywords: ['institut de beauté', 'esthétique', 'spa'] },
+    ],
+  },
+  {
+    id: 'restauration', label: 'RESTAURATION',
+    categories: [
+      { id: 'restaurant', label: 'Restaurant', keywords: ['restaurant', 'brasserie', 'bistrot'] },
+      { id: 'fastfood',   label: 'Fast food',  keywords: ['fast food', 'snack', 'kebab'] },
+      { id: 'cafe',       label: 'Café',       keywords: ['café', 'coffee shop', 'salon de thé'] },
+    ],
+  },
+  {
+    id: 'services', label: 'SERVICES',
+    categories: [
+      { id: 'garage',      label: 'Garage',      keywords: ['garage auto', 'mécanique auto', 'carrosserie'] },
+      { id: 'plombier',    label: 'Plombier',    keywords: ['plombier'] },
+      { id: 'electricien', label: 'Électricien', keywords: ['électricien'] },
+    ],
+  },
+  {
+    id: 'commerce', label: 'COMMERCE',
+    categories: [
+      { id: 'boulangerie', label: 'Boulangerie', keywords: ['boulangerie', 'pâtisserie'] },
+      { id: 'boucherie',   label: 'Boucherie',   keywords: ['boucherie', 'charcuterie'] },
+      { id: 'fleuriste',   label: 'Fleuriste',   keywords: ['fleuriste'] },
+    ],
+  },
+];
 
 function isMobile() {
-  return window.innerWidth <= 640;
+  return window.innerWidth <= 768;
 }
 
 function openMobileOverlay(html) {
@@ -82,45 +101,40 @@ function closeMobileOverlay() {
 mobileOverlayClose.addEventListener('click', closeMobileOverlay);
 mobileOverlayBackdrop.addEventListener('click', closeMobileOverlay);
 
-let currentResults   = [];
-let displayedResults = [];
-let selectedIndex    = null;
-let isSearching      = false;
-let searchLat        = null;
-let searchLng        = null;
-let acDebounce       = null;
-let parcoursSet      = new Set();
-let seenSet          = new Set();
-let searchHistory    = [];
-let userAddress      = null; // User's stored address from database
+let currentResults    = [];
+let displayedResults  = [];
+let selectedIndex     = null;
+let isSearching       = false;
+let searchLat         = null;
+let searchLng         = null;
+let acDebounce        = null;
+let parcoursSet       = new Set();
+let seenSet           = new Set();
+let searchHistory     = [];
+let userAddress       = null;
+let currentLocation   = null;
+let currentCategoryId = null;
+let categoryCounts    = {};
 
 const QUICK_SMS_SCRIPT = (prospect = {}) => {
-  const name = prospect.name || "votre établissement";
-  const type = Array.isArray(prospect.types)
-  ? prospect.types.join(' ').toLowerCase()
-  : '';
-
-  let label = "commerces";
-  if (type.includes('hair') || type.includes('beauty')) label = "salons";
-  else if (type.includes('restaurant') || type.includes('food')) label = "restaurants";
-  else if (type.includes('gym') || type.includes('fitness')) label = "salles de sport";
-  else if (type.includes('car') || type.includes('garage')) label = "garages";
-
+  const name = prospect.name || 'votre établissement';
+  const type = Array.isArray(prospect.types) ? prospect.types.join(' ').toLowerCase() : '';
+  let label = 'commerces';
+  if (type.includes('hair') || type.includes('beauty')) label = 'salons';
+  else if (type.includes('restaurant') || type.includes('food')) label = 'restaurants';
+  else if (type.includes('gym') || type.includes('fitness')) label = 'salles de sport';
+  else if (type.includes('car') || type.includes('garage')) label = 'garages';
   return `Bonjour, je vous contacte car j'aide des ${label} comme ${name} à obtenir plus de clients via Google et à automatiser les réservations. Est-ce que vous avez déjà un site optimisé aujourd'hui ?`;
 };
 
 const QUICK_CALL_SCRIPT = (prospect = {}) => {
-  const name = prospect.name || "votre établissement";
-  const type = Array.isArray(prospect.types)
-  ? prospect.types.join(' ').toLowerCase()
-  : '';
-
-  let label = "commerces";
-  if (type.includes('hair') || type.includes('beauty')) label = "salons";
-  else if (type.includes('restaurant') || type.includes('food')) label = "restaurants";
-  else if (type.includes('gym') || type.includes('fitness')) label = "salles de sport";
-  else if (type.includes('car') || type.includes('garage')) label = "garages";
-
+  const name = prospect.name || 'votre établissement';
+  const type = Array.isArray(prospect.types) ? prospect.types.join(' ').toLowerCase() : '';
+  let label = 'commerces';
+  if (type.includes('hair') || type.includes('beauty')) label = 'salons';
+  else if (type.includes('restaurant') || type.includes('food')) label = 'restaurants';
+  else if (type.includes('gym') || type.includes('fitness')) label = 'salles de sport';
+  else if (type.includes('car') || type.includes('garage')) label = 'garages';
   return `Bonjour, je travaille avec des ${label} comme ${name} pour leur apporter plus de clients via Google et simplifier les réservations. Je voulais savoir si vous avez déjà un site performant aujourd'hui ?`;
 };
 
@@ -133,7 +147,7 @@ const FALLBACK_PLACE_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   </svg>`
 );
 
-// ─── Parcours set (in-memory, loaded at startup) ──────────────────────────────
+// ─── Parcours set ─────────────────────────────────────────────────────────────
 
 async function loadParcoursSet() {
   try {
@@ -146,7 +160,7 @@ async function loadParcoursSet() {
   } catch {}
 }
 
-// ─── Seen prospects (database) ────────────────────────────────────────────────
+// ─── Seen prospects ───────────────────────────────────────────────────────────
 
 async function loadSeen() {
   try {
@@ -154,15 +168,12 @@ async function loadSeen() {
     if (!res.ok) return new Set();
     const data = await res.json();
     seenSet = new Set((data.seen || []).map(s => `${s.name}||${s.address}`));
-  } catch {
-    seenSet = new Set();
-  }
+  } catch { seenSet = new Set(); }
 }
 
 async function markSeen(s) {
   const key = seenKey(s);
   if (seenSet.has(key)) return;
-  
   try {
     await fetch(`${API_URL}/seen`, {
       method: 'POST',
@@ -173,7 +184,7 @@ async function markSeen(s) {
   } catch {}
 }
 
-// ─── Search history (database) ────────────────────────────────────────────────
+// ─── Search history ───────────────────────────────────────────────────────────
 
 async function loadHistory() {
   try {
@@ -181,9 +192,7 @@ async function loadHistory() {
     if (!res.ok) return [];
     const data = await res.json();
     searchHistory = (data.history || []).map(h => h.location);
-  } catch {
-    searchHistory = [];
-  }
+  } catch { searchHistory = []; }
 }
 
 async function addToHistory(location) {
@@ -193,7 +202,6 @@ async function addToHistory(location) {
       headers: Auth.authHeaders(),
       body: JSON.stringify({ location }),
     });
-    // Update local cache
     searchHistory = searchHistory.filter(h => h !== location);
     searchHistory.unshift(location);
     searchHistory = searchHistory.slice(0, 10);
@@ -210,34 +218,19 @@ async function removeFromHistory(location) {
   } catch {}
 }
 
-// ─── Load user data ───────────────────────────────────────────────────────────
+// ─── Load user ────────────────────────────────────────────────────────────────
 
 async function loadUser() {
   try {
     const res = await fetch(`${API_URL}/me`, { headers: Auth.authHeaders() });
-    
-    // Handle 401 - token invalide ou expiré
-    if (res.status === 401) {
-      Auth.logout();
-      return;
-    }
-    
+    if (res.status === 401) { Auth.logout(); return; }
     if (!res.ok) return;
-    
-    // Vérifier que la réponse est du JSON
     const contentType = res.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      return;
-    }
-    
+    if (!contentType || !contentType.includes('application/json')) return;
     const user = await res.json();
     userAddress = user.start_address ?? null;
-  } catch {
-    // En cas d'erreur réseau ou autre, on continue silencieusement
-  }
+  } catch {}
 }
-
-// ─── Initialize data from database ────────────────────────────────────────────
 
 async function initializeData() {
   await loadUser();
@@ -248,44 +241,80 @@ async function initializeData() {
 
 initializeData();
 
-// ─── Search ───────────────────────────────────────────────────────────────────
+// ─── Search state ─────────────────────────────────────────────────────────────
 
 function updateSearchButtonState() {
   const location = locationInput.value.trim();
   searchBtn.disabled = isSearching || location === '';
 }
 
-async function search() {
+// ─── Zone search (loads category counts → sidebar) ────────────────────────────
+
+async function searchZone() {
   const location = locationInput.value.trim();
-  const businessType = queryInput.value.trim();
   if (!location || isSearching) return;
 
   isSearching = true;
-  setStatus('Recherche en cours…');
-  updateSearchButtonState();
+  currentLocation = location;
+  currentCategoryId = null;
+  currentResults = [];
+  displayedResults = [];
   resultsEl.innerHTML = '';
   detailPanel.classList.add('hidden');
-  closeMobileOverlay();
-  selectedIndex = null;
-  displayedResults = [];
-  currentResults = [];
   toolbarEl.classList.add('hidden');
 
+  setStatus('Analyse de la zone en cours…');
+  updateSearchButtonState();
+
   try {
-    const body = {
-      location,
-      mode: 'single',
-      businessType,
-      ...(filterNoWebsite?.checked && { hasWebsite: false }),
-      ...(filterNoBooking?.checked  && { hasBooking: false }),
-      ...(filterOnlyHot?.checked    && { onlyHot: true }),
-      minRating:  Number(filterMinRating?.value  || 0),
-      minReviews: Number(filterMinReviews?.value || 0),
-    };
-    if (searchLat != null && searchLng != null) {
-      body.lat = searchLat;
-      body.lng = searchLng;
-    }
+    const body = { location, categoryCounts: true };
+    if (searchLat != null && searchLng != null) { body.lat = searchLat; body.lng = searchLng; }
+
+    const res = await fetch(`${API_URL}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (res.status === 401) { Auth.logout(); return; }
+    if (!res.ok) throw new Error(`Erreur serveur (${res.status})`);
+
+    const data = await res.json();
+    categoryCounts = data.counts || {};
+    await addToHistory(location);
+    renderSidebar();
+    clearStatus();
+  } catch (err) {
+    console.error('[Prospectly] /search categoryCounts error:', err);
+    setStatus(`Erreur : ${err.message}`, true);
+  } finally {
+    isSearching = false;
+    updateSearchButtonState();
+  }
+}
+
+// ─── Category search (loads results for selected category) ───────────────────
+
+async function searchCategory(categoryId, keywords) {
+  if (!currentLocation || isSearching) return;
+  closeMobileOverlay();
+
+  isSearching = true;
+  currentCategoryId = categoryId;
+  currentResults = [];
+  displayedResults = [];
+  resultsEl.innerHTML = '';
+  detailPanel.classList.add('hidden');
+  toolbarEl.classList.add('hidden');
+  selectedIndex = null;
+
+  setStatus('Recherche en cours…');
+  updateSearchButtonState();
+  updateSidebarActive();
+
+  try {
+    const body = { location: currentLocation, mode: 'multi', keywords };
+    if (searchLat != null && searchLng != null) { body.lat = searchLat; body.lng = searchLng; }
 
     const res = await fetch(`${API_URL}/search`, {
       method: 'POST',
@@ -298,11 +327,18 @@ async function search() {
 
     const data = await res.json();
     currentResults = Array.isArray(data) ? data : (data.results ?? []);
-    await addToHistory(location);
+
+    const activeCatEl = document.getElementById('activeCategoryLabel');
+    if (activeCatEl) {
+      const allCats = CATEGORY_GROUPS.flatMap(g => g.categories);
+      const cat = allCats.find(c => c.id === categoryId);
+      activeCatEl.textContent = cat ? cat.label : '';
+    }
+
     renderResults();
     clearStatus();
   } catch (err) {
-    console.error('[Prospectly] Erreur API /search :', err);
+    console.error('[Prospectly] /search category error:', err);
     setStatus(`Erreur : ${err.message}`, true);
   } finally {
     isSearching = false;
@@ -310,12 +346,75 @@ async function search() {
   }
 }
 
-function handleSearch(event) {
-  if (event) event.preventDefault();
-  search();
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+
+function buildCategoryListHtml(groups, counts, activeCategoryId) {
+  return groups.map(group => `
+    <div class="category-group">
+      <div class="category-group-label">${escape(group.label)}</div>
+      ${group.categories.map(cat => {
+        const count = counts[cat.id] ?? 0;
+        const isActive = activeCategoryId === cat.id;
+        const kwJson = JSON.stringify(cat.keywords).replace(/'/g, '&#39;');
+        return `<button
+          class="category-item${isActive ? ' active' : ''}"
+          data-id="${escape(cat.id)}"
+          data-keywords='${kwJson}'
+        >
+          <span class="cat-label">${escape(cat.label)}</span>
+          <span class="cat-count">${count > 0 ? count : '—'}</span>
+        </button>`;
+      }).join('')}
+    </div>
+  `).join('');
 }
 
-// ─── Render ───────────────────────────────────────────────────────────────────
+function attachCategoryEvents(container) {
+  container.querySelectorAll('.category-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const keywords = JSON.parse(btn.dataset.keywords.replace(/&#39;/g, "'"));
+      searchCategory(id, keywords);
+    });
+  });
+}
+
+function renderSidebar() {
+  const sidebar = document.getElementById('categorySidebar');
+  if (!sidebar) return;
+
+  sidebar.innerHTML = `
+    <div class="sidebar-zone">${escape(currentLocation || '')}</div>
+    <div class="sidebar-content">
+      ${buildCategoryListHtml(CATEGORY_GROUPS, categoryCounts, currentCategoryId)}
+    </div>
+  `;
+  attachCategoryEvents(sidebar.querySelector('.sidebar-content'));
+  sidebar.classList.remove('hidden');
+
+  const mobileCatsBtn = document.getElementById('mobileCatsBtn');
+  if (mobileCatsBtn) mobileCatsBtn.classList.remove('hidden');
+}
+
+function updateSidebarActive() {
+  document.querySelectorAll('.category-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.id === currentCategoryId);
+  });
+}
+
+// Mobile categories button opens overlay
+document.getElementById('mobileCatsBtn')?.addEventListener('click', () => {
+  const html = `
+    <div class="sidebar-zone">${escape(currentLocation || '')}</div>
+    <div class="sidebar-content">
+      ${buildCategoryListHtml(CATEGORY_GROUPS, categoryCounts, currentCategoryId)}
+    </div>
+  `;
+  openMobileOverlay(html);
+  attachCategoryEvents(document.getElementById('mobileOverlayContent'));
+});
+
+// ─── Render results ───────────────────────────────────────────────────────────
 
 function renderResults() {
   if (!currentResults.length) {
@@ -325,19 +424,18 @@ function renderResults() {
 
   displayedResults = currentResults;
   if (!displayedResults.length) {
-    resultCountEl.textContent = '0 prospect trouve';
+    resultCountEl.textContent = '0 prospect trouvé';
     toolbarEl.classList.remove('hidden');
     resultsEl.innerHTML = '<p class="empty-state">Aucun prospect avec ces filtres.</p>';
     return;
   }
 
-  resultCountEl.textContent = `${displayedResults.length} prospect${displayedResults.length > 1 ? 's' : ''} trouve${displayedResults.length > 1 ? 's' : ''}`;
+  resultCountEl.textContent = `${displayedResults.length} prospect${displayedResults.length > 1 ? 's' : ''} trouvé${displayedResults.length > 1 ? 's' : ''}`;
   toolbarEl.classList.remove('hidden');
 
   const cards = displayedResults.map((s, i) => {
     const isSeen = seenSet.has(seenKey(s));
     const imageUrl = escape(s.imageUrl || FALLBACK_PLACE_IMAGE);
-    const actionLabel = 'Voir details';
     return `
       <div class="card${isSeen ? ' seen' : ''}" data-index="${i}">
         <div class="card-cover loading">
@@ -367,7 +465,7 @@ function renderResults() {
             <a class="quick-btn secondary" href="${escape(s.googleMapsUrl)}" target="_blank" rel="noopener">Maps</a>
           </div>
         </div>
-        <button class="detail-btn" title="${actionLabel}">${actionLabel}</button>
+        <button class="detail-btn" title="Voir details">Voir details</button>
       </div>
     `;
   }).join('');
@@ -376,12 +474,7 @@ function renderResults() {
   resultsEl.querySelectorAll('.card-image').forEach((img) => {
     const cover = img.closest('.card-cover');
     if (!cover) return;
-
-    const onLoad = () => {
-      cover.classList.remove('loading');
-      cover.classList.add('loaded');
-    };
-
+    const onLoad = () => { cover.classList.remove('loading'); cover.classList.add('loaded'); };
     const onError = () => {
       if (!img.dataset.fallbackApplied) {
         img.dataset.fallbackApplied = '1';
@@ -390,7 +483,6 @@ function renderResults() {
       }
       onLoad();
     };
-
     if (img.complete && img.naturalWidth > 0) onLoad();
     else {
       img.addEventListener('load', onLoad, { once: true });
@@ -407,32 +499,23 @@ function handleCardClick(e) {
     const idx = parseInt(quickTarget.dataset.index, 10);
     const prospect = displayedResults[idx];
     if (!prospect) return;
-    if (quickTarget.dataset.quick === 'copy-phone') {
-      copyToClipboard(prospect.phone || '');
-      return;
-    }
-    if (quickTarget.dataset.quick === 'copy-msg') {
-      copyToClipboard(buildSmsMessage(prospect));
-      return;
-    }
+    if (quickTarget.dataset.quick === 'copy-phone') { copyToClipboard(prospect.phone || ''); return; }
+    if (quickTarget.dataset.quick === 'copy-msg') { copyToClipboard(buildSmsMessage(prospect)); return; }
   }
   const card = e.target.closest('.card');
   if (!card) return;
-  const index = parseInt(card.dataset.index, 10);
-  selectProspect(index);
+  selectProspect(parseInt(card.dataset.index, 10));
 }
 
 function selectProspect(index) {
   selectedIndex = index;
   const prospect = displayedResults[index];
-
   markSeen(prospect);
 
   resultsEl.querySelectorAll('.card').forEach((card) => {
     const cardIndex = parseInt(card.dataset.index, 10);
     const isSelected = cardIndex === index;
     card.classList.toggle('selected', isSelected);
-
     if (isSelected) {
       card.classList.add('seen');
       if (!card.querySelector('.badge-seen')) {
@@ -451,7 +534,7 @@ function selectProspect(index) {
 }
 
 function renderDetail(s) {
-  const phone   = s.phone   ?? null;
+  const phone   = s.phone ?? null;
   const website = s.website ?? null;
   const notFound = '<span class="not-found">information non trouvée</span>';
 
@@ -511,13 +594,11 @@ function renderDetail(s) {
 
     <div class="scripts-box">
       <div class="scripts-title">Scripts rapides</div>
-
       <div class="scripts-item">
         <div class="scripts-label">Appel</div>
         <p>${escape(QUICK_CALL_SCRIPT(s))}</p>
         <button class="quick-btn secondary" id="copyCallScriptBtn">Copier</button>
       </div>
-
       <div class="scripts-item">
         <div class="scripts-label">SMS</div>
         <p>${escape(QUICK_SMS_SCRIPT(s))}</p>
@@ -542,7 +623,6 @@ function renderDetail(s) {
     detailPanel.innerHTML = html;
   }
 
-  // Attach after render (element now exists in DOM)
   document.getElementById('addParcoursBtn')?.addEventListener('click', () => addToParcours(s));
   document.getElementById('copyPhoneBtn')?.addEventListener('click', () => copyToClipboard(s.phone || ''));
   document.getElementById('copySmsBtn')?.addEventListener('click', () => copyToClipboard(buildSmsMessage(s)));
@@ -627,22 +707,14 @@ function scoreLabelText(label) {
 
 function buildSmsMessage(prospect) {
   if (!prospect) return '';
-
   const name = prospect.name || 'votre établissement';
-
-  // Détection simple du type
-  const type = Array.isArray(prospect.types)
-  ? prospect.types.join(' ').toLowerCase()
-  : '';
-
+  const type = Array.isArray(prospect.types) ? prospect.types.join(' ').toLowerCase() : '';
   let label = 'établissements';
-
   if (type.includes('hair') || type.includes('beauty')) label = 'salons';
   else if (type.includes('restaurant') || type.includes('food')) label = 'restaurants';
   else if (type.includes('gym') || type.includes('fitness')) label = 'salles de sport';
   else if (type.includes('car') || type.includes('garage')) label = 'garages';
   else if (type.includes('store') || type.includes('shop')) label = 'commerces';
-
   return `Bonjour, je vous contacte car j'aide les ${label} comme ${name} à obtenir plus de clients via Google et à automatiser les réservations. Est-ce que vous avez déjà un site ou pas vraiment optimisé aujourd'hui ?`;
 }
 
@@ -650,11 +722,9 @@ async function copyToClipboard(text) {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    setStatus('Copie dans le presse-papiers');
+    setStatus('Copié dans le presse-papiers');
     setTimeout(clearStatus, 1000);
-  } catch {
-    setStatus('Impossible de copier', true);
-  }
+  } catch { setStatus('Impossible de copier', true); }
 }
 
 function escape(str) {
@@ -673,7 +743,7 @@ function highlightMatch(text, query) {
     + escape(text.slice(idx + query.length));
 }
 
-// ─── Utils ────────────────────────────────────────────────────────────────────
+// ─── Status ───────────────────────────────────────────────────────────────────
 
 function setStatus(msg, isError = false) {
   statusEl.textContent = msg;
@@ -689,28 +759,16 @@ function clearStatus() {
 
 searchForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  search();
+  searchZone();
 });
 
-// Inputs → activer/désactiver bouton
 locationInput.addEventListener('input', updateSearchButtonState);
-queryInput.addEventListener('input', updateSearchButtonState);
-
-// Init état bouton au chargement
 document.addEventListener('DOMContentLoaded', updateSearchButtonState);
 
-// Filtres — re-déclenche la recherche (les résultats sont filtrés côté backend sur le cache)
-filterNoWebsite?.addEventListener('change',  () => { if (currentResults.length) search(); });
-filterNoBooking?.addEventListener('change',  () => { if (currentResults.length) search(); });
-filterOnlyHot?.addEventListener('change',    () => { if (currentResults.length) search(); });
-filterMinRating?.addEventListener('change',  () => { if (currentResults.length) search(); });
-filterMinReviews?.addEventListener('change', () => { if (currentResults.length) search(); });
-
-// ─── Autocomplete + History (Île-de-France priority) ─────────────────────────
+// ─── Autocomplete (inchangé) ──────────────────────────────────────────────────
 
 const IDF_TERMS = /île.de.france|paris|hauts.de.seine|seine.saint.denis|val.de.marne|essonne|yvelines|val.d.oise|seine.et.marne/i;
 
-// Make initAutocomplete globally accessible for Google Maps callback
 window.initAutocomplete = function() {
   const autocompleteService = new google.maps.places.AutocompleteService();
   const placesService       = new google.maps.places.PlacesService(document.createElement('div'));
@@ -725,25 +783,13 @@ window.initAutocomplete = function() {
     searchLat = null;
     searchLng = null;
     clearTimeout(acDebounce);
-
     const query = locationInput.value.trim();
-    if (!query) {
-      renderDropdown(searchHistory, [], '');
-      return;
-    }
+    if (!query) { renderDropdown(searchHistory, [], ''); return; }
 
     acDebounce = setTimeout(() => {
-      const historyMatches = searchHistory.filter(h =>
-        h.toLowerCase().includes(query.toLowerCase())
-      );
-
+      const historyMatches = searchHistory.filter(h => h.toLowerCase().includes(query.toLowerCase()));
       autocompleteService.getPlacePredictions(
-        {
-          input: query,
-          location: IDF_CENTER,
-          radius: 80000,
-          componentRestrictions: { country: 'fr' },
-        },
+        { input: query, location: IDF_CENTER, radius: 80000, componentRestrictions: { country: 'fr' } },
         (predictions, status) => {
           const preds = (status === google.maps.places.PlacesServiceStatus.OK && predictions) ? predictions : [];
           renderDropdown(historyMatches, preds, query);
@@ -752,18 +798,12 @@ window.initAutocomplete = function() {
     }, 300);
   });
 
-  locationInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideDropdown();
-  });
+  locationInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideDropdown(); });
 
   function renderDropdown(historyItems, predictions, query) {
     dropdown.innerHTML = '';
     const presetItems = getLocationPresetSuggestions(query);
-
-    if (!historyItems.length && !presetItems.length && !predictions.length) {
-      hideDropdown();
-      return;
-    }
+    if (!historyItems.length && !presetItems.length && !predictions.length) { hideDropdown(); return; }
 
     if (historyItems.length) {
       if (!query) {
@@ -795,10 +835,7 @@ window.initAutocomplete = function() {
         <span class="ac-secondary">${escape(secText)}</span>
         ${isIDF ? '<span class="ac-badge">Île-de-France</span>' : ''}
       `;
-      item.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        selectPrediction(pred);
-      });
+      item.addEventListener('mousedown', (e) => { e.preventDefault(); selectPrediction(pred); });
       dropdown.appendChild(item);
     });
 
@@ -808,39 +845,24 @@ window.initAutocomplete = function() {
   async function createHistoryItem(loc, query) {
     const item = document.createElement('div');
     item.className = 'autocomplete-item history-item';
-
     const icon = document.createElement('span');
-    icon.className = 'ac-icon';
-    icon.textContent = '🕐';
-
+    icon.className = 'ac-icon'; icon.textContent = '🕐';
     const main = document.createElement('span');
     main.className = 'ac-main';
     main.innerHTML = query ? highlightMatch(loc, query) : escape(loc);
-
     const del = document.createElement('button');
-    del.className = 'ac-delete';
-    del.title = "Supprimer de l'historique";
-    del.textContent = '×';
-
+    del.className = 'ac-delete'; del.title = "Supprimer de l'historique"; del.textContent = '×';
     item.append(icon, main, del);
-
     del.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      removeFromHistory(loc);
-      item.remove();
+      e.preventDefault(); e.stopPropagation();
+      removeFromHistory(loc); item.remove();
       if (!dropdown.querySelector('.autocomplete-item')) hideDropdown();
     });
-
     item.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      locationInput.value = loc;
-      searchLat = null;
-      searchLng = null;
-      hideDropdown();
-      updateSearchButtonState();
+      locationInput.value = loc; searchLat = null; searchLng = null;
+      hideDropdown(); updateSearchButtonState();
     });
-
     return item;
   }
 
@@ -853,24 +875,17 @@ window.initAutocomplete = function() {
     `;
     item.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      locationInput.value = loc;
-      searchLat = null;
-      searchLng = null;
-      hideDropdown();
-      updateSearchButtonState();
+      locationInput.value = loc; searchLat = null; searchLng = null;
+      hideDropdown(); updateSearchButtonState();
     });
     return item;
   }
 
-  function hideDropdown() {
-    dropdown.classList.add('hidden');
-  }
+  function hideDropdown() { dropdown.classList.add('hidden'); }
 
   function selectPrediction(pred) {
     locationInput.value = pred.description;
-    hideDropdown();
-    updateSearchButtonState();
-
+    hideDropdown(); updateSearchButtonState();
     placesService.getDetails(
       { placeId: pred.place_id, fields: ['geometry'] },
       (place, status) => {
@@ -890,11 +905,8 @@ window.initAutocomplete = function() {
 function getLocationPresetSuggestions(query) {
   const q = query.trim().toLowerCase();
   if (!q) return [...arrondissementSuggestions.slice(0, 5), ...districtSuggestions.slice(0, 4)];
-
   const all = [...arrondissementSuggestions, ...districtSuggestions];
-  return all
-    .filter((item) => item.toLowerCase().includes(q))
-    .slice(0, 6);
+  return all.filter((item) => item.toLowerCase().includes(q)).slice(0, 6);
 }
 
 function seenKey(s) {

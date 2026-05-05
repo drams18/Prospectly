@@ -290,7 +290,141 @@ header p {
   font-weight: 500;
 }
 
-/* ── Two-column layout ──────────────────────────────────────────────────────── */
+/* ── App layout (sidebar + main) ────────────────────────────────────────────── */
+.app-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Category sidebar ───────────────────────────────────────────────────────── */
+.category-sidebar {
+  width: 210px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 20px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 12px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.sidebar-zone {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0 4px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.category-group {
+  margin-bottom: 12px;
+}
+
+.category-group-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding: 4px 4px 6px;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  margin-bottom: 2px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  text-align: left;
+  font-family: inherit;
+}
+
+.category-item:hover {
+  background: var(--primary-light);
+}
+
+.category-item.active {
+  background: var(--primary);
+}
+
+.category-item.active .cat-label { color: #fff; font-weight: 700; }
+.category-item.active .cat-count { background: rgba(255,255,255,0.25); color: #fff; }
+
+.cat-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.cat-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--primary-light);
+  color: var(--primary);
+  padding: 1px 7px;
+  border-radius: 20px;
+  min-width: 26px;
+  text-align: center;
+}
+
+/* ── Active category label in toolbar ───────────────────────────────────────── */
+.active-category-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+/* ── Mobile categories button ────────────────────────────────────────────────── */
+.mobile-cats-btn {
+  display: none;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-family: inherit;
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.mobile-cats-btn:hover { background: var(--primary); color: #fff; }
+.mobile-cats-arrow { margin-left: 6px; }
+
+/* Sidebar content inside mobile overlay */
+.mobile-overlay-content .sidebar-zone { padding-bottom: 14px; margin-bottom: 14px; }
+.mobile-overlay-content .category-item { padding: 10px 12px; }
+.mobile-overlay-content .cat-label { font-size: 0.9rem; }
+.mobile-overlay-content .cat-count { font-size: 0.78rem; padding: 2px 9px; }
+
+/* ── Two-column results layout ──────────────────────────────────────────────── */
 .results-layout {
   display: flex;
   gap: 20px;
@@ -882,6 +1016,14 @@ header p {
   }
 }
 
+/* ── Responsive: hide sidebar at 900px, show mobile button ──────────────────── */
+@media (max-width: 900px) {
+  .category-sidebar { display: none !important; }
+  .mobile-cats-btn { display: block; }
+  .app-layout { flex-direction: column; }
+  .main-content { width: 100%; }
+}
+
 /* ── Mobile responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .container {
@@ -906,26 +1048,6 @@ header p {
 
   .search-row button {
     flex: 1 1 100%;
-  }
-
-  .filters-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-
-  .filter-inline input[type="text"],
-  .filter-inline input[type="number"] {
-    width: 100%;
-  }
-
-  .filters {
-    gap: 5px;
-  }
-
-  .filter-btn {
-    padding: 6px 12px;
-    font-size: 0.78rem;
   }
 
   .toolbar {
