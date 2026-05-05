@@ -153,14 +153,15 @@ db.exec(`
         is_favorite INTEGER DEFAULT 0,
         lat REAL,
         lng REAL,
+        pipeline_status TEXT CHECK(pipeline_status IN ('new','contacted','interested','converted','refused')) DEFAULT 'new',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
     `);
-    
+
     // Migrate data: all old statuses -> 'not_done', 'done' stays 'done'
     db.exec(`
-      INSERT INTO parcours_new (id, user_id, name, address, phone, score, status, website, rating, reviews, google_maps_url, notes, visit_status, is_favorite, lat, lng, created_at, updated_at)
+      INSERT INTO parcours_new (id, user_id, name, address, phone, score, status, website, rating, reviews, google_maps_url, notes, visit_status, is_favorite, lat, lng, pipeline_status, created_at, updated_at)
       SELECT id, user_id, name, address, phone, score,
         CASE status
           WHEN 'done' THEN 'done'
@@ -168,8 +169,10 @@ db.exec(`
           WHEN 'interested' THEN 'done'
           ELSE 'not_done'
         END,
-        website, rating, reviews, google_maps_url, notes, visit_status, 
-        COALESCE(is_favorite, 0), lat, lng, created_at, updated_at
+        website, rating, reviews, google_maps_url, notes, visit_status,
+        COALESCE(is_favorite, 0), lat, lng,
+        COALESCE(pipeline_status, 'new'),
+        created_at, updated_at
       FROM parcours;
     `);
     

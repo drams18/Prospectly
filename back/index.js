@@ -572,23 +572,28 @@ app.patch('/parcours/:id/status', requireAuth, parseUserId, (req, res) => {
   const prospectId = req.params.id;
   const userId = req.userId;
 
-  const prospect = db.prepare(
-    'SELECT id, pipeline_status FROM parcours WHERE id = ? AND user_id = ?'
-  ).get(prospectId, userId);
+  try {
+    const prospect = db.prepare(
+      'SELECT id, pipeline_status FROM parcours WHERE id = ? AND user_id = ?'
+    ).get(prospectId, userId);
 
-  if (!prospect) {
-    return res.status(404).json({ error: 'Prospect non trouvé' });
+    if (!prospect) {
+      return res.status(404).json({ error: 'Prospect non trouvé' });
+    }
+
+    db.prepare(
+      `UPDATE parcours SET pipeline_status = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
+    ).run(pipeline_status, prospectId, userId);
+
+    db.prepare(
+      `INSERT INTO actions (user_id, prospect_id, type, content) VALUES (?, ?, 'status_change', ?)`
+    ).run(userId, prospectId, `Statut changé vers ${pipeline_status}`);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[PATCH /parcours/:id/status]', err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
-
-  db.prepare(
-    `UPDATE parcours SET pipeline_status = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
-  ).run(pipeline_status, prospectId, userId);
-
-  db.prepare(
-    `INSERT INTO actions (user_id, prospect_id, type, content) VALUES (?, ?, 'status_change', ?)`
-  ).run(userId, prospectId, `Statut changé vers ${pipeline_status}`);
-
-  res.json({ ok: true });
 });
 
 
@@ -725,6 +730,15 @@ app.delete('/history/:location', requireAuth, (req, res) => {
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// ─── Global error handler ─────────────────────────────────────────────────────
+
+app.use((err, _req, res, _next) => {
+  console.error('[Unhandled error]', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Erreur interne du serveur' });
+  }
+});
 
 // ─── 404 handler ──────────────────────────────────────────────────────────────
 
