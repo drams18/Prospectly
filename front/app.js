@@ -765,7 +765,7 @@ searchForm.addEventListener('submit', (e) => {
 locationInput.addEventListener('input', updateSearchButtonState);
 document.addEventListener('DOMContentLoaded', updateSearchButtonState);
 
-// ─── Autocomplete (inchangé) ──────────────────────────────────────────────────
+// ─── Autocomplete ─────────────────────────────────────────────────────────────
 
 const IDF_TERMS = /île.de.france|paris|hauts.de.seine|seine.saint.denis|val.de.marne|essonne|yvelines|val.d.oise|seine.et.marne/i;
 
@@ -774,6 +774,25 @@ window.initAutocomplete = function() {
   const placesService       = new google.maps.places.PlacesService(document.createElement('div'));
   const dropdown            = document.getElementById('autocomplete-dropdown');
   const IDF_CENTER          = new google.maps.LatLng(48.8566, 2.3522);
+  let acFocusIndex = -1;
+
+  function getFocusableItems() {
+    return [...dropdown.querySelectorAll('.autocomplete-item')];
+  }
+
+  function setAcFocus(index) {
+    const items = getFocusableItems();
+    acFocusIndex = index;
+    items.forEach((item, i) => item.classList.toggle('ac-focused', i === acFocusIndex));
+    if (acFocusIndex >= 0 && items[acFocusIndex]) {
+      items[acFocusIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function hideDropdown() {
+    dropdown.classList.add('hidden');
+    acFocusIndex = -1;
+  }
 
   locationInput.addEventListener('focus', () => {
     if (!locationInput.value.trim()) renderDropdown(searchHistory, [], '');
@@ -785,6 +804,7 @@ window.initAutocomplete = function() {
     clearTimeout(acDebounce);
     const query = locationInput.value.trim();
     if (!query) { renderDropdown(searchHistory, [], ''); return; }
+    if (query.length < 3) { hideDropdown(); return; }
 
     acDebounce = setTimeout(() => {
       const historyMatches = searchHistory.filter(h => h.toLowerCase().includes(query.toLowerCase()));
@@ -795,12 +815,28 @@ window.initAutocomplete = function() {
           renderDropdown(historyMatches, preds, query);
         }
       );
-    }, 300);
+    }, 350);
   });
 
-  locationInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideDropdown(); });
+  locationInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { hideDropdown(); return; }
+    if (dropdown.classList.contains('hidden')) return;
+    const items = getFocusableItems();
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setAcFocus((acFocusIndex + 1) % items.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setAcFocus(acFocusIndex <= 0 ? items.length - 1 : acFocusIndex - 1);
+    } else if (e.key === 'Enter' && acFocusIndex >= 0) {
+      e.preventDefault();
+      items[acFocusIndex].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    }
+  });
 
   function renderDropdown(historyItems, predictions, query) {
+    acFocusIndex = -1;
     dropdown.innerHTML = '';
     const presetItems = getLocationPresetSuggestions(query);
     if (!historyItems.length && !presetItems.length && !predictions.length) { hideDropdown(); return; }
@@ -842,7 +878,7 @@ window.initAutocomplete = function() {
     dropdown.classList.remove('hidden');
   }
 
-  async function createHistoryItem(loc, query) {
+  function createHistoryItem(loc, query) {
     const item = document.createElement('div');
     item.className = 'autocomplete-item history-item';
     const icon = document.createElement('span');
@@ -880,8 +916,6 @@ window.initAutocomplete = function() {
     });
     return item;
   }
-
-  function hideDropdown() { dropdown.classList.add('hidden'); }
 
   function selectPrediction(pred) {
     locationInput.value = pred.description;

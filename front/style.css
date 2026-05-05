@@ -196,8 +196,14 @@ header p {
   border-left: 3px solid transparent;
 }
 
-.autocomplete-item:hover {
+.autocomplete-item:hover,
+.autocomplete-item.ac-focused {
   background: var(--bg);
+}
+
+.autocomplete-item.ac-focused {
+  border-left-color: var(--primary);
+  outline: none;
 }
 
 .autocomplete-item.idf {
