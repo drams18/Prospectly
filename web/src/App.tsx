@@ -1,0 +1,41 @@
+import type { ReactNode } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { NavBar } from '@/components/NavBar'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useAuth } from '@/lib/AuthProvider'
+import DejaVusPage from '@/pages/DejaVusPage'
+import LoginPage from '@/pages/LoginPage'
+import ProfilePage from '@/pages/ProfilePage'
+import ProspectsPage from '@/pages/ProspectsPage'
+import RegisterPage from '@/pages/RegisterPage'
+import ScriptsPage from '@/pages/ScriptsPage'
+import SearchPage from '@/pages/SearchPage'
+
+function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <NavBar />
+      {children}
+    </>
+  )
+}
+
+export default function App() {
+  const { loading } = useAuth()
+  if (loading) return <div className="flex min-h-screen items-center justify-center text-text-muted">Chargement…</div>
+
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+
+      <Route path="/" element={<ProtectedRoute><AppShell><SearchPage /></AppShell></ProtectedRoute>} />
+      <Route path="/prospects" element={<ProtectedRoute><AppShell><ProspectsPage /></AppShell></ProtectedRoute>} />
+      <Route path="/deja-vus" element={<ProtectedRoute><AppShell><DejaVusPage /></AppShell></ProtectedRoute>} />
+      <Route path="/scripts" element={<ProtectedRoute><AppShell><ScriptsPage /></AppShell></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><AppShell><ProfilePage /></AppShell></ProtectedRoute>} />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
