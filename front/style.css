@@ -1996,6 +1996,95 @@ body.auth-page {
   border: 1px solid #fca5a5;
 }
 
+/* ── Scripts page ─────────────────────────────────────────────────────────────── */
+.scripts-page {
+  max-width: 820px;
+}
+
+.scripts-intro {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.scripts-loading {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.script-subtitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 20px 0 10px;
+}
+
+.script-subtitle:first-of-type {
+  margin-top: 0;
+}
+
+.script-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.script-card {
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.script-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.script-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-right: auto;
+}
+
+.script-card-content {
+  font-size: 0.92rem;
+  color: var(--text);
+  line-height: 1.5;
+  margin-top: 8px;
+  white-space: pre-line;
+}
+
+.copy-btn {
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.sms-length {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.objection-trigger {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 6px;
+}
+
+.email-subject {
+  font-size: 0.88rem;
+  color: var(--text);
+  margin-top: 8px;
+}
+
 /* Modal */
 .modal {
   position: fixed;

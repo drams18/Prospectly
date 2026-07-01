@@ -776,6 +776,15 @@ app.delete('/history/:location', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Scripts de prospection ─────────────────────────────────────────────────────
+
+app.get('/scripts', requireAuth, (_req, res) => {
+  const rows = db.prepare(
+    'SELECT id, type, category, label, subject, content, sort_order FROM scripts ORDER BY type, category, sort_order'
+  ).all();
+  res.json({ scripts: rows });
+});
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => res.json({ ok: true }));

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scripts de prospection - Prospectly</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="auth-bar">
+      <span id="usernameDisplay" class="auth-username"></span>
+      <a href="index.html" class="nav-link">Retour à la recherche</a>
+      <a href="parcours.html" class="nav-link">Mon Parcours</a>
+      <a href="profile.html" class="nav-link">Profil</a>
+      <button id="logoutBtn" class="logout-btn">Déconnexion</button>
+    </div>
+
+    <main class="profile-page scripts-page">
+      <div class="profile-container">
+        <h1>Scripts de prospection</h1>
+        <p class="scripts-intro">Aucune variable à remplacer. Copie-colle, ou lis directement au téléphone.</p>
+
+        <div id="scriptsContent">
+          <p class="scripts-loading">Chargement des scripts...</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="auth.js" defer></script>
+  <script src="scripts.js" defer></script>
+</body>
+</html>
