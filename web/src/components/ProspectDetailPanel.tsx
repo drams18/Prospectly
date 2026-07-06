@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { buildCallScript, buildSmsMessage } from '@/data/scripts'
 import { useHotkeys } from '@/hooks/useHotkeys'
-import { useProspectHistory, useToggleFavorite, useUpdateProspectNotes, useUpdateProspectStatus } from '@/hooks/useProspects'
+import { useToggleFavorite, useUpdateProspectNotes, useUpdateProspectStatus } from '@/hooks/useProspects'
 import { PROSPECT_STATUSES, STATUS_LABELS, type Prospect } from '@/types/prospect'
 import { StatusBadge } from './StatusBadge'
 
@@ -11,25 +10,35 @@ interface ProspectDetailPanelProps {
   onDelete: () => void
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  created: 'Créé',
-  status_change: 'Statut modifié',
-  note_updated: 'Note modifiée',
-  favorite_toggled: 'Favori modifié',
-}
-
 export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDetailPanelProps) {
+  // Tracked locally and updated optimistically on each action: the panel can
+  // stay open across a mutation (e.g. right after Explorer's "Sauvegarder"),
+  // and its `prospect` prop is a point-in-time snapshot that never refreshes
+  // from the query cache on its own.
+  const [status, setStatus] = useState(prospect.status)
+  const [isFavorite, setIsFavorite] = useState(prospect.is_favorite)
   const [notes, setNotes] = useState(prospect.notes ?? '')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { data: history } = useProspectHistory(prospect.id)
   const updateStatus = useUpdateProspectStatus()
   const updateNotes = useUpdateProspectNotes()
   const toggleFavorite = useToggleFavorite()
 
   useEffect(() => {
+    setStatus(prospect.status)
+    setIsFavorite(prospect.is_favorite)
     setNotes(prospect.notes ?? '')
-  }, [prospect.id, prospect.notes])
+  }, [prospect.id, prospect.status, prospect.is_favorite, prospect.notes])
+
+  function onStatusChange(next: Prospect['status']) {
+    setStatus(next)
+    updateStatus.mutate({ id: prospect.id, status: next })
+  }
+
+  function onToggleFavorite() {
+    setIsFavorite(v => !v)
+    toggleFavorite.mutate({ id: prospect.id, isFavorite: !isFavorite })
+  }
 
   function onNotesChange(value: string) {
     setNotes(value)
@@ -39,23 +48,14 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
     }, 600)
   }
 
-  // Number keys 1-7 jump straight to a status while the panel is open —
-  // matches the "changement de statut en un clic" requirement.
+  // Number keys 1-3 jump straight to a status while the panel is open.
   useHotkeys(
     Object.fromEntries(
-      PROSPECT_STATUSES.map((status, i) => [
-        String(i + 1),
-        () => updateStatus.mutate({ id: prospect.id, status }),
-      ])
+      PROSPECT_STATUSES.map((s, i) => [String(i + 1), () => onStatusChange(s)])
     ),
     [prospect.id]
   )
   useHotkeys({ Escape: onClose }, [onClose])
-
-  async function copy(text: string) {
-    if (!text) return
-    await navigator.clipboard.writeText(text)
-  }
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
@@ -70,13 +70,13 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <StatusBadge status={prospect.status} />
+          <StatusBadge status={status} />
           <button
-            onClick={() => toggleFavorite.mutate({ id: prospect.id, isFavorite: !prospect.is_favorite })}
-            className={`rounded-app px-2 py-1 text-sm ${prospect.is_favorite ? 'text-warning-text' : 'text-text-muted'}`}
-            title={prospect.is_favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+            onClick={onToggleFavorite}
+            className={`rounded-app px-2 py-1 text-sm ${isFavorite ? 'text-warning-text' : 'text-text-muted'}`}
+            title={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
           >
-            {prospect.is_favorite ? '★ Favori' : '☆ Favori'}
+            {isFavorite ? '★ Favori' : '☆ Favori'}
           </button>
         </div>
 
@@ -84,28 +84,27 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
           {prospect.phone && (
             <Field label="Téléphone" value={<a className="text-primary" href={`tel:${prospect.phone}`}>{prospect.phone}</a>} />
           )}
-          {prospect.website && (
-            <Field label="Site web" value={<a className="truncate text-primary" href={prospect.website} target="_blank" rel="noopener">{prospect.website}</a>} />
-          )}
-          {prospect.category && <Field label="Catégorie" value={prospect.category} />}
-          {prospect.rating != null && <Field label="Note" value={`★ ${prospect.rating} (${prospect.reviews ?? 0} avis)`} />}
+          <Field label="Site web" value={prospect.website ? <a className="truncate text-primary" href={prospect.website} target="_blank" rel="noopener">{prospect.website}</a> : 'Non'} />
+          <Field label="Instagram" value={prospect.has_instagram ? 'Oui' : 'Non'} />
+          <Field label="Réservation en ligne" value={prospect.has_booking ? 'Oui' : 'Non'} />
+          {prospect.rating != null && <Field label="Note Google" value={`★ ${prospect.rating} (${prospect.reviews ?? 0} avis)`} />}
           {prospect.score != null && <Field label="Score" value={`${prospect.score}/100`} />}
         </div>
 
         <div className="mt-4">
           <label className="mb-1 block text-xs font-medium uppercase text-text-muted">Changer le statut</label>
           <div className="flex flex-wrap gap-2">
-            {PROSPECT_STATUSES.map((status) => (
+            {PROSPECT_STATUSES.map((s) => (
               <button
-                key={status}
-                onClick={() => updateStatus.mutate({ id: prospect.id, status })}
+                key={s}
+                onClick={() => onStatusChange(s)}
                 className={`rounded-app border px-3 py-1.5 text-sm ${
-                  prospect.status === status
+                  status === s
                     ? 'border-primary bg-primary-light text-primary'
                     : 'border-border-strong text-text-secondary hover:bg-bg'
                 }`}
               >
-                {STATUS_LABELS[status]}
+                {STATUS_LABELS[s]}
               </button>
             ))}
           </div>
@@ -113,9 +112,6 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
 
         <div className="mt-4 flex flex-wrap gap-2">
           {prospect.phone && <a className="quick-action" href={`tel:${prospect.phone}`}>Appeler</a>}
-          {prospect.phone && <button className="quick-action" onClick={() => copy(prospect.phone!)}>Copier numéro</button>}
-          <button className="quick-action" onClick={() => copy(buildSmsMessage(prospect.name, prospect.category))}>Copier SMS</button>
-          <button className="quick-action" onClick={() => copy(buildCallScript(prospect.name, prospect.category))}>Copier script appel</button>
           {prospect.google_maps_url && <a className="quick-action" href={prospect.google_maps_url} target="_blank" rel="noopener">Maps</a>}
         </div>
 
@@ -130,19 +126,6 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
           />
         </div>
 
-        <div className="mt-4">
-          <div className="mb-1 text-xs font-medium uppercase text-text-muted">Historique</div>
-          <div className="max-h-40 space-y-1 overflow-y-auto rounded-app border border-border p-2">
-            {!history?.length && <div className="text-sm text-text-muted">Aucun historique</div>}
-            {history?.map((h) => (
-              <div key={h.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-text-secondary">{ACTION_LABELS[h.action] ?? h.action}{h.new_value ? ` → ${h.new_value}` : ''}</span>
-                <span className="shrink-0 text-xs text-text-muted">{new Date(h.created_at).toLocaleString('fr-FR')}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div className="mt-6 flex justify-end">
           <button onClick={onDelete} className="rounded-app px-3 py-2 text-sm font-medium text-danger-text hover:bg-danger-bg">
             Supprimer ce prospect
@@ -153,7 +136,7 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
   )
 }
 
-function Field({ label, value }: { label: string; value: ReactNode }) {
+export function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="min-w-0">
       <div className="text-xs font-medium uppercase text-text-muted">{label}</div>

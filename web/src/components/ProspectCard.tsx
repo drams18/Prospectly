@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import type { SearchLead } from '@/types/prospect'
 
 const FALLBACK_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -10,10 +9,10 @@ const FALLBACK_IMAGE = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   </svg>`
 )
 
-const SCORE_STYLES: Record<'hot' | 'medium' | 'low', string> = {
-  hot: 'bg-danger-text',
-  medium: 'bg-warning-text',
-  low: 'bg-text-muted',
+const BADGE: Record<'hot' | 'medium' | 'low', { emoji: string; label: string }> = {
+  hot: { emoji: '🔥', label: 'Excellent prospect' },
+  medium: { emoji: '🟡', label: 'Bon prospect' },
+  low: { emoji: '⚪', label: 'Faible potentiel' },
 }
 
 function formatDistance(meters: number | null) {
@@ -21,38 +20,47 @@ function formatDistance(meters: number | null) {
   return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`
 }
 
-export function ProspectCard({ lead, onOpen }: { lead: SearchLead; onOpen: () => void }) {
+interface ProspectCardProps {
+  lead: SearchLead
+  saved: boolean
+  onOpen: () => void
+  onSave: () => void
+}
+
+export function ProspectCard({ lead, saved, onOpen, onSave }: ProspectCardProps) {
+  const badge = BADGE[lead.scoreLabel]
+  const distance = formatDistance(lead.distance)
+
   return (
     <div className="cursor-pointer overflow-hidden rounded-app-lg border border-border bg-surface shadow-sm transition hover:shadow-md" onClick={onOpen}>
-      <div className="relative h-36 w-full bg-bg">
+      <div className="relative h-32 w-full bg-bg">
         <img src={lead.imageUrl ?? FALLBACK_IMAGE} alt={lead.name} loading="lazy" className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-        <div className={`absolute left-3 top-3 rounded-full px-2 py-1 text-xs font-semibold text-white ${SCORE_STYLES[lead.scoreLabel]}`}>
-          {lead.score}
+        <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-text">
+          <span>{badge.emoji}</span>
+          <span>{lead.score}/100</span>
         </div>
         <div className="absolute bottom-2 left-3 right-3 truncate font-medium text-white">{lead.name}</div>
       </div>
 
       <div className="space-y-2 p-3">
-        <div className="truncate text-sm text-text-secondary">{lead.address}</div>
-        <div className="flex flex-wrap gap-1.5">
-          {!lead.website && <Tag className="bg-danger-bg text-danger-text">Pas de site</Tag>}
-          {!lead.hasBooking && <Tag className="bg-warning-bg text-warning-text">Pas de réservation</Tag>}
-          {lead.hasInstagram && <Tag className="bg-info-bg text-info-text">Instagram</Tag>}
-          {lead.wastedPotential && <Tag className="bg-primary-light text-primary">Potentiel perdu</Tag>}
-          {lead.rating && <Tag className="bg-bg text-text-secondary">★ {lead.rating}</Tag>}
-          {lead.reviews > 0 && <Tag className="bg-bg text-text-secondary">{lead.reviews} avis</Tag>}
-          {formatDistance(lead.distance) && <Tag className="bg-bg text-text-secondary">{formatDistance(lead.distance)}</Tag>}
+        {lead.category && <div className="text-sm text-text-secondary">{lead.category}</div>}
+
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm text-text-secondary">
+          {distance && <div>{distance}</div>}
+          {lead.rating != null && <div>★ {lead.rating} ({lead.reviews} avis)</div>}
+          <div>Site web : {lead.website ? 'Oui' : 'Non'}</div>
+          <div>Réservation : {lead.hasBooking ? 'Oui' : 'Non'}</div>
         </div>
+
         <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
           {lead.phone && <a className="quick-action" href={`tel:${lead.phone}`}>Appeler</a>}
           <a className="quick-action" href={lead.googleMapsUrl} target="_blank" rel="noopener">Maps</a>
+          <button className="quick-action" onClick={onSave} disabled={saved}>
+            {saved ? 'Sauvegardé ✓' : 'Sauvegarder'}
+          </button>
         </div>
       </div>
     </div>
   )
-}
-
-function Tag({ children, className }: { children: ReactNode; className: string }) {
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>{children}</span>
 }

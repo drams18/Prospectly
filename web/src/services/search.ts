@@ -16,14 +16,6 @@ interface BaseSearchBody extends SearchFilters {
   lng?: number
 }
 
-export async function fetchCategoryCounts(body: BaseSearchBody): Promise<Record<string, number>> {
-  const { data, error } = await supabase.functions.invoke('search', {
-    body: { ...body, categoryCounts: true },
-  })
-  if (error) throw error
-  return data.counts ?? {}
-}
-
 export interface CategorySearchResult {
   results: SearchLead[]
   meta: { mode: string; total: number; totalUnfiltered: number; keywords?: string[] }

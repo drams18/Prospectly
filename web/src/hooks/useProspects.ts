@@ -1,9 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/AuthProvider'
 import {
-  deleteProspect, getProspectCounts, getProspectHistory, listProspects,
+  deleteProspect, getProspectCounts, listProspects,
   toggleFavorite, updateProspectNotes, updateProspectStatus,
-  type ProspectSort,
 } from '@/services/prospects'
 import type { ProspectStatus } from '@/types/prospect'
 
@@ -11,7 +10,6 @@ export interface ProspectsFilter {
   status: ProspectStatus | 'all'
   favoritesOnly: boolean
   search: string
-  sort: ProspectSort
 }
 
 export function useProspects(filter: ProspectsFilter) {
@@ -38,14 +36,6 @@ export function useProspectCounts() {
   })
 }
 
-export function useProspectHistory(prospectId: string | null) {
-  return useQuery({
-    queryKey: ['prospect-history', prospectId],
-    queryFn: () => getProspectHistory(prospectId!),
-    enabled: !!prospectId,
-  })
-}
-
 function useInvalidateProspects() {
   const queryClient = useQueryClient()
   return () => {
@@ -56,13 +46,9 @@ function useInvalidateProspects() {
 
 export function useUpdateProspectStatus() {
   const invalidate = useInvalidateProspects()
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: ProspectStatus }) => updateProspectStatus(id, status),
-    onSuccess: (_data, { id }) => {
-      invalidate()
-      queryClient.invalidateQueries({ queryKey: ['prospect-history', id] })
-    },
+    onSuccess: invalidate,
   })
 }
 

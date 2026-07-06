@@ -1,29 +1,12 @@
-export type ProspectStatus =
-  | 'new'
-  | 'seen'
-  | 'contacted'
-  | 'appointment'
-  | 'client'
-  | 'refused'
-  | 'follow_up'
+export type ProspectStatus = 'to_contact' | 'contacted' | 'client'
 
-export const PROSPECT_STATUSES: ProspectStatus[] = [
-  'new', 'seen', 'contacted', 'appointment', 'client', 'refused', 'follow_up',
-]
+export const PROSPECT_STATUSES: ProspectStatus[] = ['to_contact', 'contacted', 'client']
 
 export const STATUS_LABELS: Record<ProspectStatus, string> = {
-  new: 'Nouveau',
-  seen: 'Déjà vu',
+  to_contact: 'À contacter',
   contacted: 'Contacté',
-  appointment: 'Rendez-vous pris',
   client: 'Client',
-  refused: 'Refus',
-  follow_up: 'À relancer',
 }
-
-// Statuses that should hide a business from fresh area/category searches —
-// anything the user has already interacted with.
-export const PROCESSED_STATUSES: ProspectStatus[] = PROSPECT_STATUSES.filter(s => s !== 'new')
 
 export interface Prospect {
   id: string
@@ -55,20 +38,11 @@ export interface Prospect {
   updated_at: string
 }
 
-export interface ProspectHistoryEntry {
-  id: string
-  prospect_id: string
-  user_id: string
-  action: string
-  old_value: string | null
-  new_value: string | null
-  created_at: string
-}
-
 // Raw lead shape returned by the `search` Supabase Edge Function.
 export interface SearchLead {
   placeId: string
   name: string
+  category: string | null
   address: string
   phone: string | null
   rating: number | null
@@ -87,5 +61,4 @@ export interface SearchLead {
   scoreLabel: 'hot' | 'medium' | 'low'
   isHot: boolean
   wastedPotential: boolean
-  instaDependent: boolean
 }

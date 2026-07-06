@@ -1,16 +1,13 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Prospect, ProspectHistoryEntry, ProspectStatus, SearchLead } from '@/types/prospect'
+import type { Prospect, ProspectStatus, SearchLead } from '@/types/prospect'
 
 const PAGE_SIZE = 30
-
-export type ProspectSort = 'updated_desc' | 'created_desc' | 'name_asc' | 'score_desc'
 
 export interface ListProspectsParams {
   userId: string
   status?: ProspectStatus | 'all'
   favoritesOnly?: boolean
   search?: string
-  sort?: ProspectSort
   page: number
 }
 
@@ -20,7 +17,7 @@ export interface ListProspectsResult {
 }
 
 export async function listProspects({
-  userId, status = 'all', favoritesOnly = false, search = '', sort = 'updated_desc', page,
+  userId, status = 'all', favoritesOnly = false, search = '', page,
 }: ListProspectsParams): Promise<ListProspectsResult> {
   let query = supabase.from('prospects').select('*').eq('user_id', userId)
 
@@ -33,8 +30,7 @@ export async function listProspects({
     )
   }
 
-  const [column, ascending] = sortToOrder(sort)
-  query = query.order(column, { ascending, nullsFirst: false })
+  query = query.order('updated_at', { ascending: false, nullsFirst: false })
 
   const from = page * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -43,15 +39,6 @@ export async function listProspects({
 
   const rows = (data ?? []) as Prospect[]
   return { rows, nextPage: rows.length === PAGE_SIZE ? page + 1 : null }
-}
-
-function sortToOrder(sort: ProspectSort): [string, boolean] {
-  switch (sort) {
-    case 'created_desc': return ['created_at', false]
-    case 'name_asc': return ['name', true]
-    case 'score_desc': return ['score', false]
-    default: return ['updated_at', false]
-  }
 }
 
 export async function getProspectCounts(userId: string): Promise<Record<string, number>> {
@@ -63,22 +50,6 @@ export async function getProspectCounts(userId: string): Promise<Record<string, 
     counts[row.status] = (counts[row.status] ?? 0) + 1
   }
   return counts
-}
-
-export async function getProspectById(id: string): Promise<Prospect | null> {
-  const { data, error } = await supabase.from('prospects').select('*').eq('id', id).maybeSingle()
-  if (error) throw error
-  return data
-}
-
-export async function getProspectHistory(prospectId: string): Promise<ProspectHistoryEntry[]> {
-  const { data, error } = await supabase
-    .from('prospect_history')
-    .select('*')
-    .eq('prospect_id', prospectId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as ProspectHistoryEntry[]
 }
 
 export async function updateProspectStatus(id: string, status: ProspectStatus): Promise<void> {
@@ -119,13 +90,13 @@ export async function fetchKnownStatuses(userId: string, placeIds: string[]): Pr
   return map
 }
 
-// Called when a prospect card is opened during a search: persists it and
-// marks it 'seen' — never downgrades a prospect that's already further along
-// the pipeline (e.g. already 'contacted').
-export async function markLeadSeen(userId: string, lead: SearchLead): Promise<Prospect> {
+// Explicit "Sauvegarder" action: persists a search lead into the user's
+// prospects. Only writes a fresh 'to_contact' status on first insert — an
+// already-saved prospect keeps whatever status the user has since set.
+export async function saveLead(userId: string, lead: SearchLead): Promise<Prospect> {
   const { data: existing, error: selectError } = await supabase
     .from('prospects')
-    .select('id, status')
+    .select('id')
     .eq('user_id', userId)
     .eq('place_id', lead.placeId)
     .maybeSingle()
@@ -133,6 +104,7 @@ export async function markLeadSeen(userId: string, lead: SearchLead): Promise<Pr
 
   const fields = {
     name: lead.name,
+    category: lead.category,
     address: lead.address,
     phone: lead.phone,
     website: lead.website,
@@ -153,7 +125,7 @@ export async function markLeadSeen(userId: string, lead: SearchLead): Promise<Pr
     const { data, error } = await supabase.from('prospects').insert({
       user_id: userId,
       place_id: lead.placeId,
-      status: 'seen',
+      status: 'to_contact',
       ...fields,
     }).select().single()
     if (error) throw error
@@ -162,10 +134,7 @@ export async function markLeadSeen(userId: string, lead: SearchLead): Promise<Pr
 
   const { data, error } = await supabase
     .from('prospects')
-    .update({
-      ...fields,
-      ...(existing.status === 'new' ? { status: 'seen' } : {}),
-    })
+    .update(fields)
     .eq('id', existing.id)
     .select()
     .single()

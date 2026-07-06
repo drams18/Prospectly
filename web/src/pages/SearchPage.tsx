@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CategorySidebar } from '@/components/CategorySidebar'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { LeadPreviewPanel } from '@/components/LeadPreviewPanel'
 import { LocationInput } from '@/components/LocationInput'
 import { ProspectCard } from '@/components/ProspectCard'
 import { ProspectDetailPanel } from '@/components/ProspectDetailPanel'
-import type { Category } from '@/data/categories'
+import { CATEGORY_GROUPS } from '@/data/categories'
 import { useDeleteProspect } from '@/hooks/useProspects'
-import { useCategorySearch, useMarkSeen, useZoneSearch } from '@/hooks/useSearch'
+import { useCategorySearch, useSaveLead } from '@/hooks/useSearch'
 import { useAuth } from '@/lib/AuthProvider'
 import { addSearchHistory, listSearchHistory, removeSearchHistory } from '@/services/searchHistory'
 import type { Prospect, SearchLead } from '@/types/prospect'
+
+const ALL_CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.categories)
 
 export default function SearchPage() {
   const { user } = useAuth()
@@ -19,13 +21,16 @@ export default function SearchPage() {
 
   const [location, setLocation] = useState('')
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [activeCategory, setActiveCategory] = useState<Category | null>(null)
+  const [categoryId, setCategoryId] = useState(ALL_CATEGORIES[0]?.id ?? '')
+  const [noWebsite, setNoWebsite] = useState(false)
+  const [noBooking, setNoBooking] = useState(false)
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const [selectedLead, setSelectedLead] = useState<SearchLead | null>(null)
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const zoneSearch = useZoneSearch()
   const categorySearch = useCategorySearch()
-  const markSeen = useMarkSeen()
+  const saveLead = useSaveLead()
   const deleteProspect = useDeleteProspect()
 
   const { data: history } = useQuery({
@@ -34,33 +39,35 @@ export default function SearchPage() {
     enabled: !!userId,
   })
 
-  async function runZoneSearch(loc: string, lat?: number, lng?: number) {
-    if (!loc.trim()) return
-    setActiveCategory(null)
-    categorySearch.reset()
-    await zoneSearch.mutateAsync({ location: loc, lat, lng })
-    if (userId) {
-      await addSearchHistory(userId, loc)
-      queryClient.invalidateQueries({ queryKey: ['search-history', userId] })
-    }
-  }
-
   function onPlaceSelected(loc: string, lat: number, lng: number) {
     setCoords({ lat, lng })
     setLocation(loc)
   }
 
-  function onSubmit() {
-    runZoneSearch(location, coords?.lat, coords?.lng)
+  async function onSubmit() {
+    if (!location.trim()) return
+    const category = ALL_CATEGORIES.find(c => c.id === categoryId)
+    if (!category) return
+
+    categorySearch.mutate({
+      location, lat: coords?.lat, lng: coords?.lng,
+      keywords: category.keywords, categoryLabel: category.label,
+      hasWebsite: noWebsite ? false : undefined,
+      hasBooking: noBooking ? false : undefined,
+    })
+
+    if (userId) {
+      await addSearchHistory(userId, location)
+      queryClient.invalidateQueries({ queryKey: ['search-history', userId] })
+    }
   }
 
-  function onSelectCategory(cat: Category) {
-    setActiveCategory(cat)
-    categorySearch.mutate({ location, lat: coords?.lat, lng: coords?.lng, keywords: cat.keywords })
+  function markSaved(placeId: string) {
+    setSavedIds(prev => new Set(prev).add(placeId))
   }
 
-  function onOpenLead(lead: SearchLead) {
-    markSeen.mutate(lead, { onSuccess: (prospect) => setSelectedProspect(prospect) })
+  function onSave(lead: SearchLead) {
+    saveLead.mutate(lead, { onSuccess: () => markSaved(lead.placeId) })
   }
 
   async function onRemoveHistory(loc: string) {
@@ -72,57 +79,83 @@ export default function SearchPage() {
   const results = categorySearch.data?.results ?? []
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="mx-auto max-w-3xl px-4 py-6">
       <header>
-        <h1 className="text-2xl font-semibold text-text">Explorer une zone</h1>
-        <p className="mt-1 text-sm text-text-secondary">Choisissez une zone, explorez les opportunités par secteur.</p>
+        <h1 className="text-2xl font-semibold text-text">Explorer</h1>
       </header>
 
-      <div className="mt-4 flex gap-2">
-        <div className="flex-1">
-          <LocationInput value={location} onChange={setLocation} onPlaceSelected={onPlaceSelected} onSubmit={onSubmit} />
+      <div className="mt-4 space-y-3">
+        <LocationInput value={location} onChange={setLocation} onPlaceSelected={onPlaceSelected} onSubmit={onSubmit} />
+
+        <select
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          className="w-full rounded-app border border-border-strong px-3 py-3 text-sm focus:border-primary focus:outline-none"
+        >
+          {CATEGORY_GROUPS.map((group) => (
+            <optgroup key={group.id} label={group.label}>
+              {group.categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.label}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+
+        <div className="flex flex-wrap gap-4 text-sm text-text-secondary">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={noWebsite} onChange={(e) => setNoWebsite(e.target.checked)} />
+            Sans site web
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={noBooking} onChange={(e) => setNoBooking(e.target.checked)} />
+            Sans réservation en ligne
+          </label>
         </div>
+
         <button
           onClick={onSubmit}
-          disabled={!location.trim() || zoneSearch.isPending}
-          className="rounded-app bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-50"
+          disabled={!location.trim() || categorySearch.isPending}
+          className="w-full rounded-app bg-primary px-5 py-3 text-base font-medium text-white hover:bg-primary-dark disabled:opacity-50"
         >
-          {zoneSearch.isPending ? 'Analyse…' : 'Explorer la zone'}
+          {categorySearch.isPending ? 'Recherche…' : 'Rechercher'}
         </button>
       </div>
 
       {!!history?.length && (
-        <div className="mt-2 flex flex-wrap gap-2">
-          {history.map((loc) => (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[...new Set(history)].map((loc) => (
             <span key={loc} className="flex items-center gap-1 rounded-full bg-bg px-2.5 py-1 text-xs text-text-secondary">
-              <button onClick={() => { setLocation(loc); setCoords(null); runZoneSearch(loc) }}>{loc}</button>
+              <button onClick={() => setLocation(loc)}>{loc}</button>
               <button onClick={() => onRemoveHistory(loc)} className="text-text-muted hover:text-danger-text">×</button>
             </span>
           ))}
         </div>
       )}
 
-      {zoneSearch.isError && <p className="mt-3 text-sm text-danger-text">{(zoneSearch.error as Error).message}</p>}
+      {categorySearch.isError && <p className="mt-3 text-sm text-danger-text">{(categorySearch.error as Error).message}</p>}
 
-      {zoneSearch.data && (
-        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-[240px_1fr]">
-          <aside className="rounded-app-lg border border-border bg-surface p-4">
-            <CategorySidebar counts={zoneSearch.data} activeCategoryId={activeCategory?.id ?? null} onSelect={onSelectCategory} />
-          </aside>
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {results.map((lead) => (
+          <ProspectCard
+            key={lead.placeId}
+            lead={lead}
+            saved={savedIds.has(lead.placeId)}
+            onOpen={() => setSelectedLead(lead)}
+            onSave={() => onSave(lead)}
+          />
+        ))}
+      </div>
 
-          <div>
-            {categorySearch.isPending && <p className="text-sm text-text-muted">Recherche en cours…</p>}
-            {categorySearch.isError && <p className="text-sm text-danger-text">{(categorySearch.error as Error).message}</p>}
-            {!categorySearch.isPending && activeCategory && (
-              <p className="mb-3 text-sm text-text-muted">{results.length} prospect{results.length > 1 ? 's' : ''} trouvé{results.length > 1 ? 's' : ''} — {activeCategory.label}</p>
-            )}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {results.map((lead) => (
-                <ProspectCard key={lead.placeId} lead={lead} onOpen={() => onOpenLead(lead)} />
-              ))}
-            </div>
-          </div>
-        </div>
+      {selectedLead && (
+        <LeadPreviewPanel
+          lead={selectedLead}
+          onClose={() => setSelectedLead(null)}
+          onSaved={(saved) => {
+            markSaved(selectedLead.placeId)
+            setSelectedLead(null)
+            setSelectedProspect(saved)
+          }}
+        />
       )}
 
       {selectedProspect && (
