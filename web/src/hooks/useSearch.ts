@@ -1,22 +1,22 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/AuthProvider'
-import { searchCategory, type SearchFilters } from '@/services/search'
+import { searchCategory } from '@/services/search'
 import { fetchKnownStatuses, saveLead } from '@/services/prospects'
 import type { SearchLead } from '@/types/prospect'
+import type { SubmittedSearch } from '@/store/searchStore'
 
-export interface CategorySearchInput extends SearchFilters {
-  location: string
-  lat?: number
-  lng?: number
-  keywords: string[]
-  categoryLabel: string
-}
+// Kept in cache for an hour of inactivity so navigating away and back to
+// Explorer never re-hits the Edge Function for an unchanged search.
+const SEARCH_STALE_TIME = Infinity
+const SEARCH_GC_TIME = 60 * 60_000
 
-export function useCategorySearch() {
+export function useCategorySearch(search: SubmittedSearch | null) {
   const { user } = useAuth()
 
-  return useMutation({
-    mutationFn: async ({ categoryLabel, ...input }: CategorySearchInput) => {
+  return useQuery({
+    queryKey: ['category-search', search, user?.id],
+    queryFn: async () => {
+      const { categoryLabel, ...input } = search as SubmittedSearch
       const { results, meta } = await searchCategory(input)
       const placeIds = results.map(r => r.placeId).filter(Boolean)
       const known = user ? await fetchKnownStatuses(user.id, placeIds) : new Map()
@@ -29,6 +29,10 @@ export function useCategorySearch() {
 
       return { results: filtered, meta }
     },
+    enabled: !!search,
+    staleTime: SEARCH_STALE_TIME,
+    gcTime: SEARCH_GC_TIME,
+    refetchOnMount: false,
   })
 }
 

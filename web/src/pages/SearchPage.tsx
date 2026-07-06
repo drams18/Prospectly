@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { LeadPreviewPanel } from '@/components/LeadPreviewPanel'
@@ -10,6 +10,7 @@ import { useDeleteProspect } from '@/hooks/useProspects'
 import { useCategorySearch, useSaveLead } from '@/hooks/useSearch'
 import { useAuth } from '@/lib/AuthProvider'
 import { addSearchHistory, listSearchHistory, removeSearchHistory } from '@/services/searchHistory'
+import { useSearchStore } from '@/store/searchStore'
 import type { Prospect, SearchLead } from '@/types/prospect'
 
 const ALL_CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.categories)
@@ -19,17 +20,26 @@ export default function SearchPage() {
   const queryClient = useQueryClient()
   const userId = user?.id ?? ''
 
-  const [location, setLocation] = useState('')
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [categoryId, setCategoryId] = useState(ALL_CATEGORIES[0]?.id ?? '')
-  const [noWebsite, setNoWebsite] = useState(false)
-  const [noBooking, setNoBooking] = useState(false)
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const location = useSearchStore(s => s.location)
+  const coords = useSearchStore(s => s.coords)
+  const categoryId = useSearchStore(s => s.categoryId)
+  const noWebsite = useSearchStore(s => s.noWebsite)
+  const noBooking = useSearchStore(s => s.noBooking)
+  const submittedSearch = useSearchStore(s => s.submittedSearch)
+  const savedIds = useSearchStore(s => s.savedIds)
+  const setLocation = useSearchStore(s => s.setLocation)
+  const setCoords = useSearchStore(s => s.setCoords)
+  const setCategoryId = useSearchStore(s => s.setCategoryId)
+  const setNoWebsite = useSearchStore(s => s.setNoWebsite)
+  const setNoBooking = useSearchStore(s => s.setNoBooking)
+  const submitSearch = useSearchStore(s => s.submitSearch)
+  const markSaved = useSearchStore(s => s.markSaved)
+
   const [selectedLead, setSelectedLead] = useState<SearchLead | null>(null)
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const categorySearch = useCategorySearch()
+  const categorySearch = useCategorySearch(submittedSearch)
   const saveLead = useSaveLead()
   const deleteProspect = useDeleteProspect()
 
@@ -38,6 +48,18 @@ export default function SearchPage() {
     queryFn: () => listSearchHistory(userId),
     enabled: !!userId,
   })
+
+  // Restore the list scroll position synchronously (before paint) so returning
+  // to Explorer never shows a visible jump back to the top.
+  useLayoutEffect(() => {
+    window.scrollTo(0, useSearchStore.getState().scrollY)
+
+    function handleScroll() {
+      useSearchStore.setState({ scrollY: window.scrollY })
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   function onPlaceSelected(loc: string, lat: number, lng: number) {
     setCoords({ lat, lng })
@@ -49,7 +71,7 @@ export default function SearchPage() {
     const category = ALL_CATEGORIES.find(c => c.id === categoryId)
     if (!category) return
 
-    categorySearch.mutate({
+    submitSearch({
       location, lat: coords?.lat, lng: coords?.lng,
       keywords: category.keywords, categoryLabel: category.label,
       hasWebsite: noWebsite ? false : undefined,
@@ -60,10 +82,6 @@ export default function SearchPage() {
       await addSearchHistory(userId, location)
       queryClient.invalidateQueries({ queryKey: ['search-history', userId] })
     }
-  }
-
-  function markSaved(placeId: string) {
-    setSavedIds(prev => new Set(prev).add(placeId))
   }
 
   function onSave(lead: SearchLead) {
@@ -114,10 +132,10 @@ export default function SearchPage() {
 
         <button
           onClick={onSubmit}
-          disabled={!location.trim() || categorySearch.isPending}
+          disabled={!location.trim() || categorySearch.isFetching}
           className="w-full rounded-app bg-primary px-5 py-3 text-base font-medium text-white hover:bg-primary-dark disabled:opacity-50"
         >
-          {categorySearch.isPending ? 'Recherche…' : 'Rechercher'}
+          {categorySearch.isFetching ? 'Recherche…' : 'Rechercher'}
         </button>
       </div>
 
