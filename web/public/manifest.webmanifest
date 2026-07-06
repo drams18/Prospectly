@@ -1,0 +1,15 @@
+{
+  "name": "Prospectly",
+  "short_name": "Prospectly",
+  "description": "Outil de prospection terrain B2B",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/pwa-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
