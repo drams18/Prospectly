@@ -38,11 +38,17 @@ export interface Prospect {
   updated_at: string
 }
 
+export interface OpeningHours {
+  openNow: boolean | null
+  weekdayText: string[]
+}
+
 // Raw lead shape returned by the `search` Supabase Edge Function.
 export interface SearchLead {
   placeId: string
   name: string
   category: string | null
+  types?: string[]
   address: string
   phone: string | null
   rating: number | null
@@ -54,6 +60,8 @@ export interface SearchLead {
   hasInstagram: boolean
   googleMapsUrl: string
   imageUrl: string | null
+  photos?: string[]
+  openingHours?: OpeningHours | null
   lat: number | null
   lng: number | null
   distance: number | null
