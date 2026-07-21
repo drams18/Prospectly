@@ -10,6 +10,7 @@ export interface ProspectsFilter {
   status: ProspectStatus | 'all'
   favoritesOnly: boolean
   validatedOnly?: boolean
+  excludeValidated?: boolean
   search: string
   orderBy?: 'updated_at' | 'last_seen_at'
 }

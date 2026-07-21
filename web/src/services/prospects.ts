@@ -8,6 +8,7 @@ export interface ListProspectsParams {
   status?: ProspectStatus | 'all'
   favoritesOnly?: boolean
   validatedOnly?: boolean
+  excludeValidated?: boolean
   search?: string
   page: number
   orderBy?: 'updated_at' | 'last_seen_at'
@@ -19,18 +20,20 @@ export interface ListProspectsResult {
 }
 
 // Point 8: the Historique page reuses this with orderBy: 'last_seen_at' to
-// surface the most recently (re)consulted prospects first, regardless of
-// status — it lists every row ever seen, not just the CRM-curated ones.
-// "Mes Prospects" passes validatedOnly: true so it only shows what the user
-// explicitly validated (✚), not every card that merely passed through the feed.
+// surface the most recently (re)consulted prospects first. It now passes
+// excludeValidated: true so a prospect the user validated moves exclusively
+// into "Mes Prospects" and drops out of Historique — the two lists are
+// disjoint, not overlapping. "Mes Prospects" passes validatedOnly: true so
+// it only shows what the user explicitly validated (✚).
 export async function listProspects({
-  userId, status = 'all', favoritesOnly = false, validatedOnly = false, search = '', page, orderBy = 'updated_at',
+  userId, status = 'all', favoritesOnly = false, validatedOnly = false, excludeValidated = false, search = '', page, orderBy = 'updated_at',
 }: ListProspectsParams): Promise<ListProspectsResult> {
   let query = supabase.from('prospects').select('*').eq('user_id', userId)
 
   if (status !== 'all') query = query.eq('status', status)
   if (favoritesOnly) query = query.eq('is_favorite', true)
   if (validatedOnly) query = query.eq('is_validated', true)
+  if (excludeValidated) query = query.eq('is_validated', false)
   if (search.trim()) {
     const term = `%${search.trim()}%`
     query = query.or(

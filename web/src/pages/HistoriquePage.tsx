@@ -14,9 +14,9 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-// Point 8: every prospect ever displayed in the feed lives here, regardless
-// of status — unlike "Mes Prospects" this is the full consultation history,
-// sorted by most recently (re)seen.
+// Point 8: every prospect displayed in the feed but not validated lives
+// here, sorted by most recently (re)seen. Once a prospect is validated (✚)
+// it moves exclusively to "Mes Prospects" and disappears from this list.
 export default function HistoriquePage() {
   const [statusFilter, setStatusFilter] = useState<ProspectStatus | 'all'>('all')
   const [search, setSearch] = useState('')
@@ -24,7 +24,7 @@ export default function HistoriquePage() {
   const [selected, setSelected] = useState<Prospect | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const filter = { status: statusFilter, favoritesOnly: false, search: debouncedSearch, orderBy: 'last_seen_at' as const }
+  const filter = { status: statusFilter, favoritesOnly: false, excludeValidated: true, search: debouncedSearch, orderBy: 'last_seen_at' as const }
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useProspects(filter)
   const deleteProspect = useDeleteProspect()
   const restoreProspect = useRestoreProspect()
