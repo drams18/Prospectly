@@ -49,3 +49,37 @@ export const CATEGORY_GROUPS: CategoryGroup[] = [
 export const CATEGORY_MAP: Record<string, Category> = Object.fromEntries(
   CATEGORY_GROUPS.flatMap(g => g.categories.map(c => [c.id, c]))
 );
+
+// Google Places type -> French display label, used by the auto-feed where
+// there's no user-picked category. Ordered roughly by how likely a type is
+// to appear first/meaningfully in a place's `types` array.
+const GOOGLE_TYPE_LABELS: Record<string, string> = {
+  restaurant: 'Restaurant', bakery: 'Boulangerie', cafe: 'Café', bar: 'Bar',
+  meal_takeaway: 'Restauration rapide', meal_delivery: 'Restauration rapide',
+  hair_care: 'Coiffure / Barbier', beauty_salon: 'Institut de beauté', spa: 'Spa',
+  car_repair: 'Garage automobile', car_dealer: 'Concessionnaire auto', car_wash: 'Lavage auto',
+  plumber: 'Plombier', electrician: 'Électricien', locksmith: 'Serrurier',
+  doctor: 'Médecin', dentist: 'Dentiste', physiotherapist: 'Kinésithérapeute',
+  hospital: 'Centre médical', pharmacy: 'Pharmacie', veterinary_care: 'Vétérinaire',
+  lodging: 'Hôtel', real_estate_agency: 'Agence immobilière', insurance_agency: 'Assurance',
+  lawyer: 'Avocat', accounting: 'Comptable', bank: 'Banque',
+  gym: 'Salle de sport', school: 'École', primary_school: 'École',
+  secondary_school: 'École', university: 'École', book_store: 'Librairie',
+  clothing_store: 'Boutique de vêtements', shoe_store: 'Magasin de chaussures',
+  jewelry_store: 'Bijouterie', florist: 'Fleuriste', furniture_store: 'Magasin de meubles',
+  hardware_store: 'Quincaillerie', electronics_store: 'Magasin d’électronique',
+  supermarket: 'Supérette', grocery_or_supermarket: 'Épicerie', convenience_store: 'Commerce de proximité',
+  butcher_shop: 'Boucherie', store: 'Boutique',
+};
+
+export function deriveCategoryLabel(types: string[] = []): string {
+  for (const type of types) {
+    if (GOOGLE_TYPE_LABELS[type]) return GOOGLE_TYPE_LABELS[type];
+  }
+  const fallback = types.find(t => !['point_of_interest', 'establishment'].includes(t));
+  if (!fallback) return 'Commerce';
+  return fallback
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}

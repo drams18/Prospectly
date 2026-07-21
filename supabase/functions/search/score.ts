@@ -23,16 +23,50 @@ export interface ScorableLead {
   hasBooking?: boolean;
   rating?: number | null;
   reviews?: number | null;
+  types?: string[] | null;
+  phone?: string | null;
+  address?: string | null;
+  photos?: string[] | null;
+  openingHours?: unknown | null;
 }
 
-export function computeScore(prospect: ScorableLead): number {
-  let score = 0;
-  if (!prospect.website) score += 60;
-  if (!prospect.hasBooking) score += 40;
-  if ((prospect.rating ?? 0) >= 4) score += 20;
-  if ((prospect.reviews ?? 0) >= 20) score += 20;
-  if (prospect.website && prospect.hasBooking) score -= 30;
-  return Math.max(0, Math.min(100, Math.round(score)));
+// Google Places types typical of artisans, liberal professions and
+// service-based independents — the profile prospecting should favor.
+const INDEPENDENT_SERVICE_TYPES = [
+  'hair_care', 'beauty_salon', 'spa', 'car_repair', 'doctor', 'dentist',
+  'lawyer', 'accounting', 'plumber', 'electrician', 'locksmith',
+  'real_estate_agency', 'insurance_agency', 'physiotherapist',
+  'veterinary_care', 'bakery', 'butcher_shop', 'florist', 'restaurant',
+  'cafe',
+];
+
+export interface ScoreRule {
+  id: string;
+  points: number;
+  test: (lead: ScorableLead) => boolean;
+}
+
+// Additive, independently-testable scoring signals. Add a new prospecting
+// criterion by appending a rule here — computeScore() and the sum/clamp
+// logic never need to change. Summed then clamped to [0, 100].
+export const SCORE_RULES: ScoreRule[] = [
+  { id: 'no-website', points: 45, test: l => !l.website },
+  { id: 'no-booking', points: 30, test: l => !l.hasBooking },
+  // "Établissement récent" has no reliable signal in the Places API (no
+  // founding-date field) — a low review count is used as its proxy instead.
+  { id: 'low-review-volume', points: 10, test: l => (l.reviews ?? 0) < 10 },
+  { id: 'incomplete-profile', points: 10, test: l => !l.phone || !l.address || !l.openingHours },
+  { id: 'few-photos', points: 5, test: l => (l.photos?.length ?? 0) < 3 },
+  { id: 'independent-service-activity', points: 10, test: l => (l.types ?? []).some(t => INDEPENDENT_SERVICE_TYPES.includes(t)) },
+  { id: 'decent-rating', points: 15, test: l => (l.rating ?? 0) >= 4 },
+  { id: 'established-reviews', points: 15, test: l => (l.reviews ?? 0) >= 20 },
+  { id: 'already-well-known', points: -25, test: l => (l.reviews ?? 0) >= 1000 },
+  { id: 'website-and-booking-already-optimized', points: -30, test: l => !!l.website && !!l.hasBooking },
+];
+
+export function computeScore(lead: ScorableLead): number {
+  const total = SCORE_RULES.reduce((sum, rule) => sum + (rule.test(lead) ? rule.points : 0), 0);
+  return Math.max(0, Math.min(100, Math.round(total)));
 }
 
 export function getScoreLabel(score: number): 'hot' | 'medium' | 'low' {
@@ -69,9 +103,16 @@ export interface SearchFilters {
   onlyHot?: boolean;
 }
 
+export interface OpeningHours {
+  openNow: boolean | null;
+  weekdayText: string[];
+}
+
 export interface ScoredLead extends LeadFlags {
   placeId: string;
   name: string;
+  category: string | null;
+  types: string[];
   address: string;
   phone: string | null;
   rating: number | null;
@@ -83,6 +124,8 @@ export interface ScoredLead extends LeadFlags {
   hasInstagram: boolean;
   googleMapsUrl: string;
   imageUrl: string | null;
+  photos: string[];
+  openingHours: OpeningHours | null;
   lat: number | null;
   lng: number | null;
   distance: number | null;

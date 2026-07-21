@@ -1,4 +1,5 @@
 import { promisePool } from './pool.ts';
+import { filterOutChains } from './chains.ts';
 
 const PLACES_BASE = 'https://maps.googleapis.com/maps/api/place';
 
@@ -47,11 +48,19 @@ export const TYPE_MAP: Record<string, string> = {
 
 export const SCAN_NICHES = Object.keys(KEYWORD_MAP);
 
-const FRANCHISE_BLACKLIST = [
-  'saint algue', 'franck provost', 'jean-louis david', 'dessange',
-  'jacques dessange', 'camille albane', "toni&guy", 'toni & guy',
-  "l'oréal", 'great lengths', 'hair success',
-  'mcdonald', 'burger king', 'subway', 'kfc', 'quick',
+// Radius bands (meters) for the auto-feed. Each band is fetched as a full
+// disc from the search center; the caller ring-diffs against the previous
+// band's radius to only keep newly-covered businesses.
+export const RADIUS_LADDER = [1500, 3000, 5000, 8000, 12000, 18000, 25000];
+
+// Broad Google Nearby Search `type` values used to fan out a feed band.
+// Scoping each call to a real business type (rather than a bare keyword-less
+// search) avoids Google's prominence-ranking cap silently hiding businesses
+// outside the top ~60 results, and keeps non-business noise (transit stops,
+// parks, admin areas) out of the pipeline at the source.
+const FEED_TYPE_BUCKETS = [
+  'restaurant', 'store', 'beauty_salon', 'car_repair',
+  'health', 'lodging', 'gym', 'real_estate_agency',
 ];
 
 export function expandKeywords(query: string): string[] {
@@ -115,11 +124,6 @@ export function haversineDistance(lat1: number, lng1: number, lat2: number, lng2
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-export function isFranchise(name: string): boolean {
-  const lower = (name || '').toLowerCase();
-  return FRANCHISE_BLACKLIST.some(f => lower.includes(f));
-}
-
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 interface NearbySearchParams {
@@ -157,6 +161,32 @@ async function nearbySearch({ lat, lng, radius, keyword, placeType, apiKey }: Ne
   } while (pageToken);
 
   return results;
+}
+
+export interface SearchFeedBandParams {
+  lat: number;
+  lng: number;
+  radius: number;
+  apiKey: string;
+}
+
+// Fans a feed band out across broad business-type buckets instead of a bare
+// keyword-less search: Google's Nearby Search ranks by prominence and caps
+// at ~60 results per call regardless of radius, so an unscoped call would
+// permanently miss anything outside the top ~60 as the radius grows.
+export async function searchFeedBand({ lat, lng, radius, apiKey }: SearchFeedBandParams): Promise<GooglePlace[]> {
+  const tasks = FEED_TYPE_BUCKETS.map(placeType => async () => {
+    try { return await nearbySearch({ lat, lng, radius, placeType, apiKey }); }
+    catch { return [] as GooglePlace[]; }
+  });
+  const batches = await promisePool(tasks, 4);
+
+  const seen = new Map<string, GooglePlace>();
+  for (const batch of batches) {
+    for (const place of batch) seen.set(place.place_id, place);
+  }
+
+  return filterOutChains([...seen.values()]);
 }
 
 export interface SearchPlacesParams {
@@ -236,7 +266,7 @@ export async function searchPlaces({
     }
   }
 
-  filtered = filtered.filter(place => !isFranchise(place.name));
+  filtered = filterOutChains(filtered);
 
   return filtered;
 }
@@ -254,12 +284,14 @@ export interface PlaceDetails {
   types?: string[];
   url?: string;
   photos?: Array<{ photo_reference?: string }>;
+  opening_hours?: { open_now?: boolean; weekday_text?: string[] };
 }
 
 export async function getPlaceDetails(placeId: string, apiKey: string): Promise<PlaceDetails | null> {
   const fields = [
     'place_id', 'name', 'formatted_address', 'formatted_phone_number', 'website',
     'rating', 'user_ratings_total', 'geometry', 'business_status', 'types', 'url', 'photos',
+    'opening_hours',
   ].join(',');
 
   const url = new URL(`${PLACES_BASE}/details/json`);
@@ -315,5 +347,5 @@ export async function searchPlacesCount({ lat, lng, radius, keywords, apiKey }: 
   });
   const batches = await promisePool(tasks, 4);
   for (const batch of batches) for (const place of batch) seen.set(place.place_id, place);
-  return [...seen.values()].filter(p => !isFranchise(p.name ?? ''));
+  return filterOutChains([...seen.values()]);
 }

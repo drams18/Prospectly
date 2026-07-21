@@ -1,11 +1,13 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { cacheGet, cacheSet } from './cache.ts';
-import { CATEGORY_GROUPS } from './categories.ts';
-import { isAllowedBusiness } from './filters.ts';
+import { CATEGORY_GROUPS, deriveCategoryLabel } from './categories.ts';
+import { filterOutChains } from './chains.ts';
+import { isAllowedBusiness, isNoiseType } from './filters.ts';
 import { geocodeAddress } from './geocode.ts';
 import {
-  computeAdaptiveRadii, getPlaceDetails, haversineDistance, isFranchise,
-  searchPlaces, searchPlacesCount, SCAN_NICHES,
+  computeAdaptiveRadii, getPlaceDetails, haversineDistance,
+  RADIUS_LADDER, searchFeedBand, searchPlaces, searchPlacesCount, SCAN_NICHES,
+  type GooglePlace,
 } from './places.ts';
 import { promisePool } from './pool.ts';
 import {
@@ -34,6 +36,87 @@ function buildGooglePlacePhotoUrl(photoReference: string | null, apiKey: string)
   return `${PLACES_PHOTO_ENDPOINT}?${params.toString()}`;
 }
 
+function buildGooglePlacePhotoUrls(
+  photos: Array<{ photo_reference?: string }> | undefined,
+  apiKey: string,
+  max = 5,
+): string[] {
+  if (!photos?.length) return [];
+  return photos
+    .slice(0, max)
+    .map(p => buildGooglePlacePhotoUrl(p.photo_reference ?? null, apiKey))
+    .filter((url): url is string => !!url);
+}
+
+interface EnrichContext {
+  searchLat: number;
+  searchLng: number;
+  apiKey: string;
+}
+
+// Shared by every search mode: fetches Place Details, applies the halal
+// filter + closed-business check, and builds the scored lead shape. Feed
+// mode's ring fan-out and the legacy single/multi/scan pipeline both funnel
+// their raw Google Places results through here.
+async function enrichPlace(place: GooglePlace, { searchLat, searchLng, apiKey }: EnrichContext): Promise<ScoredLead | null> {
+  try {
+    const details = await getPlaceDetails(place.place_id, apiKey);
+    if (!details) return null;
+    if (details.business_status === 'CLOSED_PERMANENTLY') return null;
+
+    const types = details.types ?? place.types ?? [];
+    if (!isAllowedBusiness({ name: details.name ?? place.name, types })) return null;
+
+    const placeLat = details.geometry?.location?.lat ?? place.geometry?.location?.lat;
+    const placeLng = details.geometry?.location?.lng ?? place.geometry?.location?.lng;
+
+    const distance = (placeLat != null && placeLng != null)
+      ? haversineDistance(searchLat, searchLng, placeLat, placeLng)
+      : null;
+
+    const photoList = details.photos?.length ? details.photos : place.photos;
+    const photos = buildGooglePlacePhotoUrls(photoList, apiKey);
+
+    const website = details.website ?? null;
+    const { hasBooking, bookingType } = detectBooking(website);
+    const hasInstagram = detectInstagram(website);
+
+    const openingHours = details.opening_hours
+      ? { openNow: details.opening_hours.open_now ?? null, weekdayText: details.opening_hours.weekday_text ?? [] }
+      : null;
+
+    const lead = {
+      placeId: place.place_id,
+      name: details.name ?? place.name,
+      category: deriveCategoryLabel(types),
+      types,
+      address: details.formatted_address ?? place.vicinity ?? '',
+      phone: details.formatted_phone_number ?? null,
+      rating: details.rating ?? place.rating ?? null,
+      reviews: details.user_ratings_total ?? place.user_ratings_total ?? 0,
+      website,
+      hasWebsite: !!website,
+      hasBooking,
+      bookingType,
+      hasInstagram,
+      googleMapsUrl: details.url ?? `https://maps.google.com/?q=${encodeURIComponent(details.name ?? place.name)}`,
+      imageUrl: photos[0] ?? null,
+      photos,
+      openingHours,
+      lat: placeLat ?? null,
+      lng: placeLng ?? null,
+      distance,
+    };
+
+    const score = computeScore(lead);
+    const flags = computeFlags(lead);
+
+    return { ...lead, score, scoreLabel: getScoreLabel(score), ...flags };
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -54,15 +137,71 @@ Deno.serve(async (req) => {
   }
 
   const {
-    location, lat, lng, query = '', businessType = '', keywords = [], mode = 'single',
+    location, lat, lng, query = '', businessType = '', keywords = [], mode = 'single', bandIndex = 0,
     hasWebsite, hasBooking: filterHasBooking, minRating = 0, minReviews = 0,
     category = '', onlyHot = false, categoryCounts = false,
   } = body as {
     location?: string; lat?: number; lng?: number; query?: string; businessType?: string;
-    keywords?: string[]; mode?: 'single' | 'multi' | 'scan'; hasWebsite?: boolean;
-    hasBooking?: boolean; minRating?: number; minReviews?: number; category?: string;
-    onlyHot?: boolean; categoryCounts?: boolean;
+    keywords?: string[]; mode?: 'single' | 'multi' | 'scan' | 'feed'; bandIndex?: number;
+    hasWebsite?: boolean; hasBooking?: boolean; minRating?: number; minReviews?: number;
+    category?: string; onlyHot?: boolean; categoryCounts?: boolean;
   };
+
+  // Feed mode has its own, self-contained pipeline: no location text, no
+  // geocoding, no keyword-based fan-out — just lat/lng from the browser and
+  // a radius-band index. Handled before the shared single/multi/scan
+  // pipeline below, which unconditionally requires a `location` string.
+  if (mode === 'feed') {
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      return json({ error: 'lat/lng requis pour le mode feed' }, 400);
+    }
+
+    const band = Math.max(0, Math.floor(bandIndex));
+
+    try {
+      if (band >= RADIUS_LADDER.length) {
+        return json({ results: [], meta: { mode: 'feed', bandIndex: band, exhausted: true } });
+      }
+
+      const cacheKey = `feed_${lat.toFixed(4)}_${lng.toFixed(4)}_${band}`;
+      const cached = await cacheGet<ScoredLead[]>(db, cacheKey);
+      if (cached) {
+        return json({ results: cached, meta: { mode: 'feed', bandIndex: band, exhausted: false } });
+      }
+
+      const radius = RADIUS_LADDER[band];
+      const prevRadius = band > 0 ? RADIUS_LADDER[band - 1] : 0;
+
+      const rawPlaces = await searchFeedBand({ lat, lng, radius, apiKey });
+
+      // Ring-diff: only keep businesses newly covered by this band's larger
+      // radius, so growing bands don't re-process the same inner disc.
+      const ring = rawPlaces.filter(place => {
+        const plat = place.geometry?.location?.lat;
+        const plng = place.geometry?.location?.lng;
+        if (plat == null || plng == null) return true;
+        return haversineDistance(lat, lng, plat, plng) > prevRadius;
+      });
+
+      // Cap Details-call volume: sort by prominence signals already present
+      // on the raw Nearby Search response, no Details call needed for this.
+      const candidates = ring
+        .filter(place => !isNoiseType(place.types))
+        .sort((a, b) => (b.user_ratings_total ?? 0) - (a.user_ratings_total ?? 0))
+        .slice(0, 40);
+
+      const enrichTasks = candidates.map(place => async () => enrichPlace(place, { searchLat: lat, searchLng: lng, apiKey }));
+      const enriched = (await promisePool(enrichTasks, 5)).filter((v): v is ScoredLead => v !== null);
+      const sorted = sortResults(enriched);
+
+      await cacheSet(db, cacheKey, sorted);
+
+      return json({ results: sorted, meta: { mode: 'feed', bandIndex: band, exhausted: false } });
+    } catch (err) {
+      console.error('[search:feed]', err);
+      return json({ error: err instanceof Error ? err.message : 'Erreur inconnue' }, 500);
+    }
+  }
 
   const normalizedBusinessType = (businessType || '').trim().toLowerCase();
   const effectiveType = (normalizedBusinessType || query || '').trim();
@@ -128,58 +267,9 @@ Deno.serve(async (req) => {
       lat: searchLat, lng: searchLng, radius: fallbackRadius, keywords, mode,
       locationText: location.trim(), businessType: normalizedBusinessType, apiKey,
     });
-    const noFranchise = rawPlaces.filter(p => !isFranchise(p.name ?? ''));
+    const noFranchise = filterOutChains(rawPlaces);
 
-    const tasks = noFranchise.map(place => async () => {
-      try {
-        const details = await getPlaceDetails(place.place_id, apiKey);
-        if (!details) return null;
-
-        if (!isAllowedBusiness({ name: details.name ?? place.name, types: details.types ?? place.types })) {
-          return null;
-        }
-
-        const placeLat = details.geometry?.location?.lat ?? place.geometry?.location?.lat;
-        const placeLng = details.geometry?.location?.lng ?? place.geometry?.location?.lng;
-
-        const distance = (placeLat != null && placeLng != null)
-          ? haversineDistance(searchLat!, searchLng!, placeLat, placeLng)
-          : null;
-
-        const photo = details.photos?.[0] || place.photos?.[0] || null;
-        const photoReference = photo?.photo_reference ?? null;
-
-        const website = details.website ?? null;
-        const { hasBooking, bookingType } = detectBooking(website);
-        const hasInstagram = detectInstagram(website);
-
-        const lead = {
-          placeId: place.place_id,
-          name: details.name ?? place.name,
-          address: details.formatted_address ?? place.vicinity ?? '',
-          phone: details.formatted_phone_number ?? null,
-          rating: details.rating ?? place.rating ?? null,
-          reviews: details.user_ratings_total ?? place.user_ratings_total ?? 0,
-          website,
-          hasWebsite: !!website,
-          hasBooking,
-          bookingType,
-          hasInstagram,
-          googleMapsUrl: details.url ?? `https://maps.google.com/?q=${encodeURIComponent(details.name ?? place.name)}`,
-          imageUrl: buildGooglePlacePhotoUrl(photoReference, apiKey),
-          lat: placeLat ?? null,
-          lng: placeLng ?? null,
-          distance,
-        };
-
-        const score = computeScore(lead);
-        const flags = computeFlags(lead);
-
-        return { ...lead, score, scoreLabel: getScoreLabel(score), ...flags };
-      } catch {
-        return null;
-      }
-    });
+    const tasks = noFranchise.map(place => async () => enrichPlace(place, { searchLat: searchLat!, searchLng: searchLng!, apiKey }));
 
     const enriched = (await promisePool(tasks, 5)).filter((v): v is ScoredLead => v !== null);
     const sorted = sortResults(enriched);
