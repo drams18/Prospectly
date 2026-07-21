@@ -7,6 +7,7 @@ export interface ListProspectsParams {
   userId: string
   status?: ProspectStatus | 'all'
   favoritesOnly?: boolean
+  validatedOnly?: boolean
   search?: string
   page: number
   orderBy?: 'updated_at' | 'last_seen_at'
@@ -20,13 +21,16 @@ export interface ListProspectsResult {
 // Point 8: the Historique page reuses this with orderBy: 'last_seen_at' to
 // surface the most recently (re)consulted prospects first, regardless of
 // status — it lists every row ever seen, not just the CRM-curated ones.
+// "Mes Prospects" passes validatedOnly: true so it only shows what the user
+// explicitly validated (✚), not every card that merely passed through the feed.
 export async function listProspects({
-  userId, status = 'all', favoritesOnly = false, search = '', page, orderBy = 'updated_at',
+  userId, status = 'all', favoritesOnly = false, validatedOnly = false, search = '', page, orderBy = 'updated_at',
 }: ListProspectsParams): Promise<ListProspectsResult> {
   let query = supabase.from('prospects').select('*').eq('user_id', userId)
 
   if (status !== 'all') query = query.eq('status', status)
   if (favoritesOnly) query = query.eq('is_favorite', true)
+  if (validatedOnly) query = query.eq('is_validated', true)
   if (search.trim()) {
     const term = `%${search.trim()}%`
     query = query.or(
@@ -45,8 +49,13 @@ export async function listProspects({
   return { rows, nextPage: rows.length === PAGE_SIZE ? page + 1 : null }
 }
 
+// Counts feed "Mes Prospects" tab badges, so only validated prospects count.
 export async function getProspectCounts(userId: string): Promise<Record<string, number>> {
-  const { data, error } = await supabase.from('prospects').select('status').eq('user_id', userId)
+  const { data, error } = await supabase
+    .from('prospects')
+    .select('status')
+    .eq('user_id', userId)
+    .eq('is_validated', true)
   if (error) throw error
 
   const counts: Record<string, number> = {}
@@ -128,12 +137,19 @@ function leadToProspectFields(lead: SearchLead) {
 }
 
 // Point 7 + 11: every lead the user is actually shown (feed card displayed,
-// or explicit "Sauvegarder") gets upserted here — unique on (user_id,
-// place_id), so re-encountering the same business updates the existing row
-// instead of duplicating it. is_seen/last_seen_at are always refreshed;
-// first_seen_at/status are only set on the very first insert, so an
-// already-processed prospect never loses the status the user gave it.
-async function upsertSeenProspect(userId: string, lead: SearchLead): Promise<Prospect> {
+// or explicit "Sauvegarder"/valider) gets upserted here — unique on
+// (user_id, place_id), so re-encountering the same business updates the
+// existing row instead of duplicating it. is_seen/last_seen_at are always
+// refreshed; first_seen_at/status are only set on the very first insert, so
+// an already-processed prospect never loses the status the user gave it.
+//
+// `validate` distinguishes the two outcomes the user asked for: a passively
+// seen card (skip / just displayed) never sets is_validated, so it only
+// ever shows up in Historique. The explicit "valider" action sets
+// is_validated=true, which is what makes it appear in "Mes Prospects". Once
+// validated, re-encountering the same lead must never un-validate it — the
+// update branch only ever sets is_validated to true, never resets it.
+async function upsertProspect(userId: string, lead: SearchLead, validate: boolean): Promise<Prospect> {
   const { data: existing, error: selectError } = await supabase
     .from('prospects')
     .select('id')
@@ -151,6 +167,7 @@ async function upsertSeenProspect(userId: string, lead: SearchLead): Promise<Pro
       place_id: lead.placeId,
       status: 'to_contact',
       is_seen: true,
+      is_validated: validate,
       first_seen_at: now,
       last_seen_at: now,
       ...fields,
@@ -161,7 +178,7 @@ async function upsertSeenProspect(userId: string, lead: SearchLead): Promise<Pro
 
   const { data, error } = await supabase
     .from('prospects')
-    .update({ ...fields, is_seen: true, last_seen_at: now })
+    .update({ ...fields, is_seen: true, last_seen_at: now, ...(validate ? { is_validated: true } : {}) })
     .eq('id', existing.id)
     .select()
     .single()
@@ -169,10 +186,16 @@ async function upsertSeenProspect(userId: string, lead: SearchLead): Promise<Pro
   return data
 }
 
-// Explicit "Sauvegarder" action from the feed/search results.
-export const saveLead = upsertSeenProspect
+// Explicit "Sauvegarder"/valider action from the feed/search results — the
+// only path that makes a prospect appear in "Mes Prospects".
+export function saveLead(userId: string, lead: SearchLead): Promise<Prospect> {
+  return upsertProspect(userId, lead, true)
+}
 
-// Called as soon as a lead is displayed to the user (current feed card) —
-// this is what makes a prospect never reappear, independent of whether the
-// user explicitly saves it.
-export const markProspectSeen = upsertSeenProspect
+// Called as soon as a lead is displayed to the user (current feed card, or
+// explicitly skipped with ✕) — persists it into Historique only, without
+// touching is_validated, so it never appears in "Mes Prospects" unless the
+// user separately validates it.
+export function markProspectSeen(userId: string, lead: SearchLead): Promise<Prospect> {
+  return upsertProspect(userId, lead, false)
+}

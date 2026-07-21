@@ -18,7 +18,7 @@ export default function ProspectsPage() {
   const [selected, setSelected] = useState<Prospect | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const filter = { status: statusFilter, favoritesOnly, search: debouncedSearch }
+  const filter = { status: statusFilter, favoritesOnly, validatedOnly: true, search: debouncedSearch }
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useProspects(filter)
   const { data: counts } = useProspectCounts()
   const deleteProspect = useDeleteProspect()

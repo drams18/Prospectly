@@ -9,6 +9,7 @@ import type { ProspectStatus } from '@/types/prospect'
 export interface ProspectsFilter {
   status: ProspectStatus | 'all'
   favoritesOnly: boolean
+  validatedOnly?: boolean
   search: string
   orderBy?: 'updated_at' | 'last_seen_at'
 }

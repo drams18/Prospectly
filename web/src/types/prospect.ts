@@ -43,6 +43,7 @@ export interface Prospect {
   is_favorite: boolean
   notes: string | null
   is_seen: boolean
+  is_validated: boolean
   first_seen_at: string
   last_seen_at: string
   photos: string[] | null
