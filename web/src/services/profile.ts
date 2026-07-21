@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabaseClient'
 export interface Profile {
   id: string
   start_address: string | null
+  category_filters: string[]
   created_at: string
 }
 
@@ -14,6 +15,11 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 
 export async function updateStartAddress(userId: string, startAddress: string): Promise<void> {
   const { error } = await supabase.from('profiles').update({ start_address: startAddress }).eq('id', userId)
+  if (error) throw error
+}
+
+export async function updateCategoryFilters(userId: string, categoryIds: string[]): Promise<void> {
+  const { error } = await supabase.from('profiles').update({ category_filters: categoryIds }).eq('id', userId)
   if (error) throw error
 }
 

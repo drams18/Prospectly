@@ -70,8 +70,12 @@ const NON_PROSPECT_TYPES = [
   // Espaces publics
   'park', 'cemetery', 'stadium',
   // Éducation / santé publiques (les praticiens indépendants — 'doctor',
-  // 'dentist', 'physiotherapist' — restent des prospects et ne sont pas ici)
-  'school', 'primary_school', 'secondary_school', 'university', 'hospital',
+  // 'dentist', 'physiotherapist' — restent des prospects et ne sont pas ici).
+  // Le type générique 'school' est volontairement absent : Google l'utilise
+  // aussi bien pour un collège public que pour une école privée, un centre
+  // de formation ou une école de musique/langues (catégories Éducation du
+  // filtre) — seuls les sous-types clairement publics restent exclus.
+  'primary_school', 'secondary_school', 'university', 'hospital',
   // Lieux de culte
   'place_of_worship', 'church', 'synagogue', 'hindu_temple', 'mosque',
   // Géographie générique (bruit de géocodage plutôt que des commerces)

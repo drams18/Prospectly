@@ -163,22 +163,44 @@ async function nearbySearch({ lat, lng, radius, keyword, placeType, apiKey }: Ne
   return results;
 }
 
+export interface FeedCategory {
+  type: string | null;
+  keywords: string[];
+}
+
 export interface SearchFeedBandParams {
   lat: number;
   lng: number;
   radius: number;
   apiKey: string;
+  categories?: FeedCategory[];
 }
 
 // Fans a feed band out across broad business-type buckets instead of a bare
 // keyword-less search: Google's Nearby Search ranks by prominence and caps
 // at ~60 results per call regardless of radius, so an unscoped call would
 // permanently miss anything outside the top ~60 as the radius grows.
-export async function searchFeedBand({ lat, lng, radius, apiKey }: SearchFeedBandParams): Promise<GooglePlace[]> {
-  const tasks = FEED_TYPE_BUCKETS.map(placeType => async () => {
-    try { return await nearbySearch({ lat, lng, radius, placeType, apiKey }); }
-    catch { return [] as GooglePlace[]; }
-  });
+//
+// When `categories` is provided (user-picked category filter), the fan-out
+// is scoped to those categories instead of the default buckets: one call
+// per category, `type=` when the category has an exact/broad Google Place
+// Type, `keyword=` otherwise (still Google's own matching — never an
+// app-side name.includes()).
+export async function searchFeedBand({ lat, lng, radius, apiKey, categories }: SearchFeedBandParams): Promise<GooglePlace[]> {
+  const tasks = categories?.length
+    ? categories.map(cat => async () => {
+        try {
+          return await nearbySearch({
+            lat, lng, radius, apiKey,
+            placeType: cat.type,
+            keyword: cat.type ? null : (cat.keywords[0] ?? null),
+          });
+        } catch { return [] as GooglePlace[]; }
+      })
+    : FEED_TYPE_BUCKETS.map(placeType => async () => {
+        try { return await nearbySearch({ lat, lng, radius, placeType, apiKey }); }
+        catch { return [] as GooglePlace[]; }
+      });
   const batches = await promisePool(tasks, 4);
 
   const seen = new Map<string, GooglePlace>();
@@ -312,21 +334,49 @@ interface NearbySearchOnceParams {
   lng: number;
   radius: number;
   keyword?: string | null;
+  placeType?: string | null;
   apiKey: string;
 }
 
-async function nearbySearchOnce({ lat, lng, radius, keyword, apiKey }: NearbySearchOnceParams): Promise<GooglePlace[]> {
+async function nearbySearchOnce({ lat, lng, radius, keyword, placeType, apiKey }: NearbySearchOnceParams): Promise<GooglePlace[]> {
   const url = new URL(`${PLACES_BASE}/nearbysearch/json`);
   url.searchParams.set('location', `${lat},${lng}`);
   url.searchParams.set('radius', String(radius));
   url.searchParams.set('key', apiKey);
   url.searchParams.set('language', 'fr');
   if (keyword) url.searchParams.set('keyword', keyword);
+  if (placeType) url.searchParams.set('type', placeType);
 
   const res = await fetch(url);
   const data = await res.json();
   if (!['OK', 'ZERO_RESULTS'].includes(data.status)) return [];
   return data.results || [];
+}
+
+export interface FeedCategoryCountsParams {
+  lat: number;
+  lng: number;
+  radius: number;
+  categories: Array<{ id: string; type: string | null; keywords: string[] }>;
+  apiKey: string;
+}
+
+// One cheap single-page nearbySearch per category (no Details calls, no
+// pagination) — used to preview "N prospects" per category when the user
+// expands a group in the category filter sheet.
+export async function searchFeedCategoryCounts({ lat, lng, radius, categories, apiKey }: FeedCategoryCountsParams): Promise<Record<string, number>> {
+  const tasks = categories.map(cat => async () => {
+    try {
+      const places = await nearbySearchOnce({
+        lat, lng, radius, apiKey,
+        placeType: cat.type,
+        keyword: cat.type ? null : (cat.keywords[0] ?? null),
+      });
+      return [cat.id, places] as const;
+    } catch { return [cat.id, [] as GooglePlace[]] as const; }
+  });
+  const results = await promisePool(tasks, 4);
+  return Object.fromEntries(results.map(([id, places]) => [id, places.length]));
 }
 
 export interface SearchPlacesCountParams {

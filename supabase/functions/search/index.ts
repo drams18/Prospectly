@@ -1,12 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { cacheGet, cacheSet } from './cache.ts';
-import { CATEGORY_GROUPS, deriveCategoryLabel } from './categories.ts';
+import { CATEGORY_GROUPS, CATEGORY_MAP, deriveCategoryLabel, type Category } from './categories.ts';
 import { filterOutChains } from './chains.ts';
 import { isAllowedBusiness, isNoiseType } from './filters.ts';
 import { geocodeAddress } from './geocode.ts';
 import {
   computeAdaptiveRadii, getPlaceDetails, haversineDistance,
-  RADIUS_LADDER, searchFeedBand, searchPlaces, searchPlacesCount, SCAN_NICHES,
+  RADIUS_LADDER, searchFeedBand, searchFeedCategoryCounts, searchPlaces, searchPlacesCount, SCAN_NICHES,
   type GooglePlace,
 } from './places.ts';
 import { promisePool } from './pool.ts';
@@ -139,13 +139,40 @@ Deno.serve(async (req) => {
   const {
     location, lat, lng, query = '', businessType = '', keywords = [], mode = 'single', bandIndex = 0,
     hasWebsite, hasBooking: filterHasBooking, minRating = 0, minReviews = 0,
-    category = '', onlyHot = false, categoryCounts = false,
+    category = '', onlyHot = false, categoryCounts = false, categoryIds, groupId,
   } = body as {
     location?: string; lat?: number; lng?: number; query?: string; businessType?: string;
     keywords?: string[]; mode?: 'single' | 'multi' | 'scan' | 'feed'; bandIndex?: number;
     hasWebsite?: boolean; hasBooking?: boolean; minRating?: number; minReviews?: number;
     category?: string; onlyHot?: boolean; categoryCounts?: boolean;
+    categoryIds?: string[]; groupId?: string;
   };
+
+  // Feed-mode category counts: a lightweight, lat/lng-only preview of "N
+  // prospects" per category within one group, used by the category filter
+  // sheet when the user expands a group. Bypasses geocoding entirely (same
+  // reasoning as `mode: 'feed'` below) and only queries the categories in
+  // the requested group, not the full taxonomy, to bound API call volume.
+  if (categoryCounts && typeof lat === 'number' && typeof lng === 'number' && groupId) {
+    try {
+      const group = CATEGORY_GROUPS.find(g => g.id === groupId);
+      if (!group) return json({ error: 'groupId inconnu' }, 400);
+
+      const countsCacheKey = `counts_feed_${lat.toFixed(4)}_${lng.toFixed(4)}_${groupId}`;
+      const cachedCounts = await cacheGet<Record<string, number>>(db, countsCacheKey);
+      if (cachedCounts) return json({ counts: cachedCounts });
+
+      const counts = await searchFeedCategoryCounts({
+        lat, lng, radius: RADIUS_LADDER[0], apiKey,
+        categories: group.categories.map(c => ({ id: c.id, type: c.type, keywords: c.keywords })),
+      });
+      await cacheSet(db, countsCacheKey, counts);
+      return json({ counts });
+    } catch (err) {
+      console.error('[search:categoryCounts:feed]', err);
+      return json({ error: err instanceof Error ? err.message : 'Erreur inconnue' }, 500);
+    }
+  }
 
   // Feed mode has its own, self-contained pipeline: no location text, no
   // geocoding, no keyword-based fan-out — just lat/lng from the browser and
@@ -157,13 +184,17 @@ Deno.serve(async (req) => {
     }
 
     const band = Math.max(0, Math.floor(bandIndex));
+    const selectedCategories = Array.isArray(categoryIds)
+      ? categoryIds.map(id => CATEGORY_MAP[id]).filter((c): c is Category => !!c)
+      : [];
+    const catKey = selectedCategories.length ? [...categoryIds!].sort().join(',') : 'all';
 
     try {
       if (band >= RADIUS_LADDER.length) {
         return json({ results: [], meta: { mode: 'feed', bandIndex: band, exhausted: true } });
       }
 
-      const cacheKey = `feed_${lat.toFixed(4)}_${lng.toFixed(4)}_${band}`;
+      const cacheKey = `feed_${lat.toFixed(4)}_${lng.toFixed(4)}_${band}_${catKey}`;
       const cached = await cacheGet<ScoredLead[]>(db, cacheKey);
       if (cached) {
         return json({ results: cached, meta: { mode: 'feed', bandIndex: band, exhausted: false } });
@@ -172,7 +203,7 @@ Deno.serve(async (req) => {
       const radius = RADIUS_LADDER[band];
       const prevRadius = band > 0 ? RADIUS_LADDER[band - 1] : 0;
 
-      const rawPlaces = await searchFeedBand({ lat, lng, radius, apiKey });
+      const rawPlaces = await searchFeedBand({ lat, lng, radius, apiKey, categories: selectedCategories });
 
       // Ring-diff: only keep businesses newly covered by this band's larger
       // radius, so growing bands don't re-process the same inner disc.

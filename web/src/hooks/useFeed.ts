@@ -13,15 +13,16 @@ interface Coords {
   lng: number
 }
 
-export function useFeed(coords: Coords | null) {
+export function useFeed(coords: Coords | null, categoryIds: string[] = []) {
   const { user } = useAuth()
   const userId = user?.id ?? ''
+  const catKey = categoryIds.length ? [...categoryIds].sort().join(',') : 'all'
 
   const query = useInfiniteQuery({
-    queryKey: ['feed', coords?.lat.toFixed(4), coords?.lng.toFixed(4), userId],
+    queryKey: ['feed', coords?.lat.toFixed(4), coords?.lng.toFixed(4), userId, catKey],
     queryFn: async ({ pageParam }) => {
       const { lat, lng } = coords as Coords
-      const { results, meta } = await fetchFeedBand({ lat, lng, bandIndex: pageParam })
+      const { results, meta } = await fetchFeedBand({ lat, lng, bandIndex: pageParam, categoryIds })
 
       const placeIds = results.map((r) => r.placeId).filter(Boolean)
       const known = user ? await fetchKnownStatuses(user.id, placeIds) : new Map()

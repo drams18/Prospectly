@@ -1,6 +1,12 @@
 export interface Category {
   id: string;
   label: string;
+  // Official Google Place Type used as the Nearby Search `type=` param when
+  // an exact (or close-enough "Table 2" broad search) match exists. `null`
+  // when Google has no matching type at all — those categories rely solely
+  // on `keywords` (Google's own `keyword=` matching, not an app-side
+  // name.includes()), per the "don't filter on name alone" requirement.
+  type: string | null;
   keywords: string[];
 }
 
@@ -12,36 +18,175 @@ export interface CategoryGroup {
 
 export const CATEGORY_GROUPS: CategoryGroup[] = [
   {
-    id: 'beaute', label: 'BEAUTÉ',
+    id: 'artisans', label: 'ARTISANS',
     categories: [
-      { id: 'barbier',    label: 'Barbier',    keywords: ['barbier', 'barber', 'barbershop'] },
-      { id: 'coiffeur',   label: 'Coiffeur',   keywords: ['coiffeur', 'salon de coiffure'] },
-      { id: 'onglerie',   label: 'Onglerie',   keywords: ['onglerie', 'nail salon', 'manucure'] },
-      { id: 'esthetique', label: 'Esthétique', keywords: ['institut de beauté', 'esthétique', 'spa'] },
+      { id: 'plombiers',      label: 'Plombiers',      type: 'plumber',            keywords: ['plombier', 'plomberie'] },
+      { id: 'electriciens',   label: 'Électriciens',    type: 'electrician',        keywords: ['électricien', 'électricité'] },
+      { id: 'serruriers',     label: 'Serruriers',      type: 'locksmith',          keywords: ['serrurier', 'serrurerie'] },
+      { id: 'menuisiers',     label: 'Menuisiers',      type: 'general_contractor', keywords: ['menuisier', 'menuiserie'] },
+      { id: 'charpentiers',   label: 'Charpentiers',    type: 'general_contractor', keywords: ['charpentier', 'charpente'] },
+      { id: 'couvreurs',      label: 'Couvreurs',       type: 'roofing_contractor', keywords: ['couvreur', 'couverture toiture'] },
+      { id: 'macons',         label: 'Maçons',          type: 'general_contractor', keywords: ['maçon', 'maçonnerie'] },
+      { id: 'peintres',       label: 'Peintres',        type: 'painter',            keywords: ['peintre en bâtiment'] },
+      { id: 'carreleurs',     label: 'Carreleurs',      type: 'general_contractor', keywords: ['carreleur', 'carrelage'] },
+      { id: 'facadiers',      label: 'Façadiers',       type: 'general_contractor', keywords: ['façadier', 'ravalement de façade'] },
+      { id: 'chauffagistes',  label: 'Chauffagistes',   type: 'general_contractor', keywords: ['chauffagiste', 'chauffage'] },
+      { id: 'climatisation',  label: 'Climatisation',   type: 'general_contractor', keywords: ['climatisation', 'installateur climatisation'] },
+      { id: 'frigoristes',    label: 'Frigoristes',     type: 'general_contractor', keywords: ['frigoriste'] },
+      { id: 'vitriers',       label: 'Vitriers',        type: 'general_contractor', keywords: ['vitrier', 'miroiterie'] },
+      { id: 'ramoneurs',      label: 'Ramoneurs',       type: 'general_contractor', keywords: ['ramoneur', 'ramonage'] },
+      { id: 'piscinistes',    label: 'Piscinistes',     type: 'general_contractor', keywords: ['pisciniste', 'construction piscine'] },
     ],
   },
   {
-    id: 'restauration', label: 'RESTAURATION',
+    id: 'automobile', label: 'AUTOMOBILE',
     categories: [
-      { id: 'restaurant', label: 'Restaurant', keywords: ['restaurant', 'brasserie', 'bistrot'] },
-      { id: 'fastfood',   label: 'Fast food',  keywords: ['fast food', 'snack', 'kebab'] },
-      { id: 'cafe',       label: 'Café',       keywords: ['café', 'coffee shop', 'salon de thé'] },
+      { id: 'garages',            label: 'Garages',                     type: 'car_repair',   keywords: ['garage automobile'] },
+      { id: 'carrossiers',        label: 'Carrossiers',                 type: 'car_repair',   keywords: ['carrossier', 'carrosserie'] },
+      { id: 'controle_technique', label: 'Centres de contrôle technique', type: null,          keywords: ['contrôle technique automobile'] },
+      { id: 'depanneurs',         label: 'Dépanneurs',                  type: null,           keywords: ['dépannage auto', 'remorquage auto'] },
+      { id: 'lavages_auto',       label: 'Lavages auto',                type: 'car_wash',     keywords: ['lavage auto', 'station de lavage'] },
+      { id: 'reparation_moto',    label: 'Réparation moto',             type: null,           keywords: ['réparation moto', 'garage moto'] },
+      { id: 'vente_pneus',        label: 'Vente de pneus',              type: null,           keywords: ['pneus', 'vulcanisateur'] },
+      { id: 'reparation_velo',    label: 'Réparation vélo',             type: 'bicycle_store', keywords: ['réparation vélo', 'atelier vélo'] },
+    ],
+  },
+  {
+    id: 'alimentation', label: 'ALIMENTATION',
+    categories: [
+      { id: 'boulangeries',    label: 'Boulangeries',    type: 'bakery', keywords: ['boulangerie'] },
+      { id: 'patisseries',     label: 'Pâtisseries',     type: 'bakery', keywords: ['pâtisserie'] },
+      { id: 'chocolatiers',    label: 'Chocolatiers',    type: 'food',   keywords: ['chocolatier'] },
+      { id: 'traiteurs',       label: 'Traiteurs',       type: 'food',   keywords: ['traiteur'] },
+      { id: 'boucheries_halal', label: 'Boucheries halal', type: 'food', keywords: ['boucherie halal'] },
+      { id: 'primeurs',        label: 'Primeurs',        type: 'food',   keywords: ['primeur', 'fruits et légumes'] },
+      { id: 'epiceries',       label: 'Épiceries',       type: 'food',   keywords: ['épicerie', 'épicerie fine'] },
+      { id: 'fromageries',     label: 'Fromageries',     type: 'food',   keywords: ['fromagerie'] },
+      { id: 'poissonneries',   label: 'Poissonneries',   type: 'food',   keywords: ['poissonnerie'] },
+      { id: 'torrefacteurs',   label: 'Torréfacteurs',   type: 'food',   keywords: ['torréfacteur', 'torréfaction café'] },
+    ],
+  },
+  {
+    id: 'beaute', label: 'BEAUTÉ',
+    categories: [
+      { id: 'coiffeurs',           label: 'Coiffeurs',            type: 'hair_care',    keywords: ['coiffeur', 'salon de coiffure'] },
+      { id: 'barbiers',            label: 'Barbiers',             type: 'hair_care',    keywords: ['barbier', 'barbershop'] },
+      { id: 'instituts_beaute',    label: 'Instituts de beauté',  type: 'beauty_salon', keywords: ['institut de beauté'] },
+      { id: 'ongleries',           label: 'Ongleries',            type: 'beauty_salon', keywords: ['onglerie', 'nail salon', 'manucure'] },
+      { id: 'esthetique',          label: 'Esthétique',           type: 'beauty_salon', keywords: ['esthétique'] },
+      { id: 'massage_bien_etre',   label: 'Massage bien-être',    type: 'spa',          keywords: ['massage', 'bien-être'] },
+    ],
+  },
+  {
+    id: 'sante', label: 'SANTÉ',
+    categories: [
+      { id: 'dentistes',            label: 'Dentistes',              type: 'dentist',         keywords: ['dentiste'] },
+      { id: 'medecins',             label: 'Médecins',               type: 'doctor',          keywords: ['médecin'] },
+      { id: 'kinesitherapeutes',    label: 'Kinésithérapeutes',      type: 'physiotherapist', keywords: ['kinésithérapeute'] },
+      { id: 'osteopathes',          label: 'Ostéopathes',            type: 'health',          keywords: ['ostéopathe'] },
+      { id: 'chiropracteurs',       label: 'Chiropracteurs',         type: 'health',          keywords: ['chiropracteur'] },
+      { id: 'orthophonistes',       label: 'Orthophonistes',         type: 'health',          keywords: ['orthophoniste'] },
+      { id: 'orthoptistes',         label: 'Orthoptistes',           type: 'health',          keywords: ['orthoptiste'] },
+      { id: 'pedicures_podologues', label: 'Pédicures-podologues',   type: 'health',          keywords: ['pédicure', 'podologue'] },
+      { id: 'infirmiers',           label: 'Infirmiers',             type: 'health',          keywords: ['infirmier', 'infirmière libérale'] },
+      { id: 'psychologues',         label: 'Psychologues',           type: 'health',          keywords: ['psychologue'] },
+      { id: 'dieteticiens',         label: 'Diététiciens',           type: 'health',          keywords: ['diététicien'] },
+      { id: 'opticiens',            label: 'Opticiens',              type: null,              keywords: ['opticien'] },
+      { id: 'audioprothesistes',    label: 'Audioprothésistes',      type: 'health',          keywords: ['audioprothésiste'] },
+      { id: 'pharmacies',           label: 'Pharmacies',             type: 'pharmacy',        keywords: ['pharmacie'] },
     ],
   },
   {
     id: 'services', label: 'SERVICES',
     categories: [
-      { id: 'garage',      label: 'Garage',      keywords: ['garage auto', 'mécanique auto', 'carrosserie'] },
-      { id: 'plombier',    label: 'Plombier',    keywords: ['plombier'] },
-      { id: 'electricien', label: 'Électricien', keywords: ['électricien'] },
+      { id: 'agences_immobilieres',   label: 'Agences immobilières',   type: 'real_estate_agency', keywords: ['agence immobilière'] },
+      { id: 'architectes',            label: 'Architectes',            type: null,                 keywords: ['architecte'] },
+      { id: 'geometres',              label: 'Géomètres',              type: null,                 keywords: ['géomètre'] },
+      { id: 'experts_comptables',     label: 'Experts-comptables',     type: 'accounting',         keywords: ['expert-comptable'] },
+      { id: 'avocats',                label: 'Avocats',                type: 'lawyer',             keywords: ['avocat'] },
+      { id: 'notaires',               label: 'Notaires',               type: null,                 keywords: ['notaire'] },
+      { id: 'assurances',             label: 'Assurances',             type: 'insurance_agency',   keywords: ['assurance'] },
+      { id: 'courtiers',              label: 'Courtiers',              type: null,                 keywords: ['courtier'] },
+      { id: 'traducteurs',            label: 'Traducteurs',            type: null,                 keywords: ['traducteur'] },
+      { id: 'photographes',           label: 'Photographes',           type: null,                 keywords: ['photographe'] },
+      { id: 'imprimeries',            label: 'Imprimeries',            type: null,                 keywords: ['imprimerie'] },
+      { id: 'agences_communication',  label: 'Agences de communication', type: null,               keywords: ['agence de communication'] },
+      { id: 'agences_web',            label: 'Agences web',            type: null,                 keywords: ['agence web'] },
+      { id: 'consultants',            label: 'Consultants',            type: null,                 keywords: ['consultant'] },
     ],
   },
   {
     id: 'commerce', label: 'COMMERCE',
     categories: [
-      { id: 'boulangerie', label: 'Boulangerie', keywords: ['boulangerie', 'pâtisserie'] },
-      { id: 'boucherie',   label: 'Boucherie',   keywords: ['boucherie', 'charcuterie'] },
-      { id: 'fleuriste',   label: 'Fleuriste',   keywords: ['fleuriste'] },
+      { id: 'fleuristes',                 label: 'Fleuristes',                       type: 'florist',        keywords: ['fleuriste'] },
+      { id: 'librairies',                 label: 'Librairies',                       type: 'book_store',     keywords: ['librairie'] },
+      { id: 'papeteries',                 label: 'Papeteries',                       type: null,             keywords: ['papeterie'] },
+      { id: 'magasins_jouets',            label: 'Magasins de jouets',               type: null,             keywords: ['magasin de jouets'] },
+      { id: 'animaleries',                label: 'Animaleries',                      type: 'pet_store',      keywords: ['animalerie'] },
+      { id: 'vetements_independants',     label: 'Magasins de vêtements indépendants', type: 'clothing_store', keywords: ['boutique de vêtements'] },
+      { id: 'boutiques_chaussures',       label: 'Boutiques de chaussures',          type: 'shoe_store',     keywords: ['magasin de chaussures'] },
+      { id: 'bijouteries',                label: 'Bijouteries',                      type: 'jewelry_store',  keywords: ['bijouterie'] },
+      { id: 'horlogers',                  label: 'Horlogers',                        type: null,             keywords: ['horloger', 'horlogerie'] },
+      { id: 'cordonniers',                label: 'Cordonniers',                      type: null,             keywords: ['cordonnier'] },
+      { id: 'pressings',                  label: 'Pressings',                        type: 'laundry',        keywords: ['pressing'] },
+      { id: 'retoucheries',               label: 'Retoucheries',                     type: 'laundry',        keywords: ['retoucherie', 'couturière'] },
+    ],
+  },
+  {
+    id: 'habitat', label: 'HABITAT',
+    categories: [
+      { id: 'magasins_decoration',              label: 'Magasins de décoration',              type: 'home_goods_store', keywords: ['magasin de décoration'] },
+      { id: 'cuisinistes',                      label: 'Cuisinistes',                         type: 'home_goods_store', keywords: ['cuisiniste', 'cuisine sur mesure'] },
+      { id: 'magasins_peinture',                label: 'Magasins de peinture',                type: 'hardware_store',   keywords: ['magasin de peinture'] },
+      { id: 'magasins_bricolage_independants',  label: 'Magasins de bricolage indépendants',  type: 'hardware_store',   keywords: ['magasin de bricolage'] },
+      { id: 'stores_volets',                    label: 'Stores et volets',                    type: 'general_contractor', keywords: ['store et volet', 'volet roulant'] },
+      { id: 'cheminees',                        label: 'Cheminées',                           type: 'home_goods_store', keywords: ['cheminée', 'poêle à bois'] },
+      { id: 'eclairage',                        label: 'Éclairage',                           type: 'home_goods_store', keywords: ['magasin de luminaires'] },
+    ],
+  },
+  {
+    id: 'sport', label: 'SPORT',
+    categories: [
+      { id: 'salles_sport',              label: 'Salles de sport',              type: 'gym',  keywords: ['salle de sport'] },
+      { id: 'clubs_fitness',             label: 'Clubs de fitness',             type: 'gym',  keywords: ['club de fitness'] },
+      { id: 'studios_yoga',              label: 'Studios de yoga',              type: 'gym',  keywords: ['studio de yoga'] },
+      { id: 'studios_pilates',           label: 'Studios de pilates',           type: 'gym',  keywords: ['studio de pilates'] },
+      { id: 'dojos',                     label: 'Dojos',                        type: 'gym',  keywords: ['dojo', 'arts martiaux'] },
+      { id: 'clubs_danse',               label: 'Clubs de danse',               type: null,   keywords: ['école de danse', 'club de danse'] },
+      { id: 'magasins_sport_independants', label: 'Magasins de sport indépendants', type: null, keywords: ['magasin de sport'] },
+    ],
+  },
+  {
+    id: 'education', label: 'ÉDUCATION',
+    categories: [
+      { id: 'auto_ecoles',       label: 'Auto-écoles',       type: null,     keywords: ['auto-école'] },
+      { id: 'ecoles_privees',    label: 'Écoles privées',    type: 'school', keywords: ['école privée'] },
+      { id: 'centres_formation', label: 'Centres de formation', type: 'school', keywords: ['centre de formation'] },
+      { id: 'soutien_scolaire',  label: 'Soutien scolaire',  type: null,     keywords: ['soutien scolaire', 'cours particuliers'] },
+      { id: 'cours_musique',     label: 'Cours de musique',  type: 'school', keywords: ['cours de musique', 'école de musique'] },
+      { id: 'ecoles_langues',    label: 'Écoles de langues',  type: 'school', keywords: ['école de langues'] },
+    ],
+  },
+  {
+    id: 'tourisme', label: 'TOURISME',
+    categories: [
+      { id: 'hotels_independants', label: 'Hôtels indépendants', type: 'lodging',       keywords: ['hôtel indépendant'] },
+      { id: 'chambres_hotes',      label: "Chambres d'hôtes",    type: 'lodging',       keywords: ["chambre d'hôtes"] },
+      { id: 'gites',               label: 'Gîtes',                type: 'lodging',       keywords: ['gîte'] },
+      { id: 'agences_voyages',     label: 'Agences de voyages',  type: 'travel_agency', keywords: ['agence de voyages'] },
+      { id: 'guides_touristiques', label: 'Guides touristiques', type: null,            keywords: ['guide touristique'] },
+    ],
+  },
+  {
+    id: 'restauration', label: 'RESTAURATION',
+    categories: [
+      { id: 'restaurants',            label: 'Restaurants',            type: 'restaurant',    keywords: ['restaurant'] },
+      { id: 'restaurants_halal',      label: 'Restaurants halal',      type: 'restaurant',    keywords: ['halal'] },
+      { id: 'pizzerias',              label: 'Pizzerias',              type: 'restaurant',    keywords: ['pizzeria'] },
+      { id: 'creperies',              label: 'Crêperies',              type: 'restaurant',    keywords: ['crêperie'] },
+      { id: 'cafes',                  label: 'Cafés',                  type: 'cafe',          keywords: ['café'] },
+      { id: 'salons_the',             label: 'Salons de thé',          type: 'cafe',          keywords: ['salon de thé'] },
+      { id: 'fastfood_independants',  label: 'Fast-food indépendants', type: 'meal_takeaway', keywords: ['fast-food indépendant'] },
     ],
   },
 ];
@@ -58,18 +203,20 @@ const GOOGLE_TYPE_LABELS: Record<string, string> = {
   meal_takeaway: 'Restauration rapide', meal_delivery: 'Restauration rapide',
   hair_care: 'Coiffure / Barbier', beauty_salon: 'Institut de beauté', spa: 'Spa',
   car_repair: 'Garage automobile', car_dealer: 'Concessionnaire auto', car_wash: 'Lavage auto',
-  plumber: 'Plombier', electrician: 'Électricien', locksmith: 'Serrurier',
-  doctor: 'Médecin', dentist: 'Dentiste', physiotherapist: 'Kinésithérapeute',
+  bicycle_store: 'Vélo', plumber: 'Plombier', electrician: 'Électricien', locksmith: 'Serrurier',
+  painter: 'Peintre', roofing_contractor: 'Couvreur', general_contractor: 'Artisan du bâtiment',
+  doctor: 'Médecin', dentist: 'Dentiste', physiotherapist: 'Kinésithérapeute', health: 'Santé',
   hospital: 'Centre médical', pharmacy: 'Pharmacie', veterinary_care: 'Vétérinaire',
   lodging: 'Hôtel', real_estate_agency: 'Agence immobilière', insurance_agency: 'Assurance',
-  lawyer: 'Avocat', accounting: 'Comptable', bank: 'Banque',
+  lawyer: 'Avocat', accounting: 'Comptable', bank: 'Banque', travel_agency: 'Agence de voyages',
   gym: 'Salle de sport', school: 'École', primary_school: 'École',
   secondary_school: 'École', university: 'École', book_store: 'Librairie',
   clothing_store: 'Boutique de vêtements', shoe_store: 'Magasin de chaussures',
   jewelry_store: 'Bijouterie', florist: 'Fleuriste', furniture_store: 'Magasin de meubles',
   hardware_store: 'Quincaillerie', electronics_store: 'Magasin d’électronique',
   supermarket: 'Supérette', grocery_or_supermarket: 'Épicerie', convenience_store: 'Commerce de proximité',
-  butcher_shop: 'Boucherie', store: 'Boutique',
+  butcher_shop: 'Boucherie', store: 'Boutique', pet_store: 'Animalerie', laundry: 'Pressing',
+  home_goods_store: 'Décoration / Maison', food: 'Alimentation',
 };
 
 export function deriveCategoryLabel(types: string[] = []): string {
