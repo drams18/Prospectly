@@ -1,6 +1,7 @@
+import { useEffect, useRef } from 'react'
 import { useGeolocation } from '@/hooks/useGeolocation'
 import { useFeed } from '@/hooks/useFeed'
-import { useSaveLead } from '@/hooks/useSearch'
+import { useMarkSeen, useSaveLead } from '@/hooks/useSearch'
 import { useFeedStore } from '@/store/feedStore'
 import type { SearchLead } from '@/types/prospect'
 import { FeedEndCard } from './FeedEndCard'
@@ -14,8 +15,19 @@ export function SwipeFeed() {
   const savedIds = useFeedStore((s) => s.savedIds)
   const markSaved = useFeedStore((s) => s.markSaved)
   const saveLead = useSaveLead()
+  const markSeen = useMarkSeen()
 
   const { leads, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = useFeed(coords)
+
+  // Point 7: the card currently on screen is considered "vu" and must never
+  // reappear — persisted right away, not only when the user swipes past it.
+  const seenPlaceIdsRef = useRef(new Set<string>())
+  useEffect(() => {
+    const lead = leads[currentIndex]
+    if (!lead || seenPlaceIdsRef.current.has(lead.placeId)) return
+    seenPlaceIdsRef.current.add(lead.placeId)
+    markSeen.mutate(lead)
+  }, [currentIndex, leads, markSeen])
 
   if (status !== 'granted' || !coords) {
     return <GeolocationGate status={status} onRetry={retry} />

@@ -9,6 +9,7 @@ export interface ListProspectsParams {
   favoritesOnly?: boolean
   search?: string
   page: number
+  orderBy?: 'updated_at' | 'last_seen_at'
 }
 
 export interface ListProspectsResult {
@@ -16,8 +17,11 @@ export interface ListProspectsResult {
   nextPage: number | null
 }
 
+// Point 8: the Historique page reuses this with orderBy: 'last_seen_at' to
+// surface the most recently (re)consulted prospects first, regardless of
+// status — it lists every row ever seen, not just the CRM-curated ones.
 export async function listProspects({
-  userId, status = 'all', favoritesOnly = false, search = '', page,
+  userId, status = 'all', favoritesOnly = false, search = '', page, orderBy = 'updated_at',
 }: ListProspectsParams): Promise<ListProspectsResult> {
   let query = supabase.from('prospects').select('*').eq('user_id', userId)
 
@@ -30,7 +34,7 @@ export async function listProspects({
     )
   }
 
-  query = query.order('updated_at', { ascending: false, nullsFirst: false })
+  query = query.order(orderBy, { ascending: false, nullsFirst: false })
 
   const from = page * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -72,14 +76,24 @@ export async function deleteProspect(id: string): Promise<void> {
   if (error) throw error
 }
 
-// Fetches the current user's known prospects among a batch of Google place_ids
-// — used to exclude already-processed businesses from fresh search results.
+// Point 10: "Remettre dans le feed" — un prospect restauré redevient
+// éligible au feed (is_seen=false) sans perdre son historique/statut/notes.
+export async function restoreProspect(id: string): Promise<void> {
+  const { error } = await supabase.from('prospects').update({ is_seen: false }).eq('id', id)
+  if (error) throw error
+}
+
+// Fetches the current user's *currently hidden* prospects (is_seen=true)
+// among a batch of Google place_ids — used to exclude already-seen or
+// already-processed businesses from fresh search results. A restored
+// prospect (is_seen=false) is deliberately absent so it can reappear.
 export async function fetchKnownStatuses(userId: string, placeIds: string[]): Promise<Map<string, ProspectStatus>> {
   if (!placeIds.length) return new Map()
   const { data, error } = await supabase
     .from('prospects')
     .select('place_id, status')
     .eq('user_id', userId)
+    .eq('is_seen', true)
     .in('place_id', placeIds)
   if (error) throw error
 
@@ -90,19 +104,8 @@ export async function fetchKnownStatuses(userId: string, placeIds: string[]): Pr
   return map
 }
 
-// Explicit "Sauvegarder" action: persists a search lead into the user's
-// prospects. Only writes a fresh 'to_contact' status on first insert — an
-// already-saved prospect keeps whatever status the user has since set.
-export async function saveLead(userId: string, lead: SearchLead): Promise<Prospect> {
-  const { data: existing, error: selectError } = await supabase
-    .from('prospects')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('place_id', lead.placeId)
-    .maybeSingle()
-  if (selectError) throw selectError
-
-  const fields = {
+function leadToProspectFields(lead: SearchLead) {
+  return {
     name: lead.name,
     category: lead.category,
     address: lead.address,
@@ -119,13 +122,37 @@ export async function saveLead(userId: string, lead: SearchLead): Promise<Prospe
     has_instagram: lead.hasInstagram,
     is_hot: lead.isHot,
     wasted_potential: lead.wastedPotential,
+    photos: lead.photos ?? null,
+    opening_hours: lead.openingHours ?? null,
   }
+}
+
+// Point 7 + 11: every lead the user is actually shown (feed card displayed,
+// or explicit "Sauvegarder") gets upserted here — unique on (user_id,
+// place_id), so re-encountering the same business updates the existing row
+// instead of duplicating it. is_seen/last_seen_at are always refreshed;
+// first_seen_at/status are only set on the very first insert, so an
+// already-processed prospect never loses the status the user gave it.
+async function upsertSeenProspect(userId: string, lead: SearchLead): Promise<Prospect> {
+  const { data: existing, error: selectError } = await supabase
+    .from('prospects')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('place_id', lead.placeId)
+    .maybeSingle()
+  if (selectError) throw selectError
+
+  const fields = leadToProspectFields(lead)
+  const now = new Date().toISOString()
 
   if (!existing) {
     const { data, error } = await supabase.from('prospects').insert({
       user_id: userId,
       place_id: lead.placeId,
       status: 'to_contact',
+      is_seen: true,
+      first_seen_at: now,
+      last_seen_at: now,
       ...fields,
     }).select().single()
     if (error) throw error
@@ -134,10 +161,18 @@ export async function saveLead(userId: string, lead: SearchLead): Promise<Prospe
 
   const { data, error } = await supabase
     .from('prospects')
-    .update(fields)
+    .update({ ...fields, is_seen: true, last_seen_at: now })
     .eq('id', existing.id)
     .select()
     .single()
   if (error) throw error
   return data
 }
+
+// Explicit "Sauvegarder" action from the feed/search results.
+export const saveLead = upsertSeenProspect
+
+// Called as soon as a lead is displayed to the user (current feed card) —
+// this is what makes a prospect never reappear, independent of whether the
+// user explicitly saves it.
+export const markProspectSeen = upsertSeenProspect

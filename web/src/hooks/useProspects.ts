@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/AuthProvider'
 import {
-  deleteProspect, getProspectCounts, listProspects,
+  deleteProspect, getProspectCounts, listProspects, restoreProspect,
   toggleFavorite, updateProspectNotes, updateProspectStatus,
 } from '@/services/prospects'
 import type { ProspectStatus } from '@/types/prospect'
@@ -10,6 +10,7 @@ export interface ProspectsFilter {
   status: ProspectStatus | 'all'
   favoritesOnly: boolean
   search: string
+  orderBy?: 'updated_at' | 'last_seen_at'
 }
 
 export function useProspects(filter: ProspectsFilter) {
@@ -44,6 +45,18 @@ function useInvalidateProspects() {
   }
 }
 
+// Point 10: a restored prospect must be able to reappear in the feed, so
+// this also invalidates the feed/search caches (not just the CRM list).
+function useInvalidateAfterRestore() {
+  const queryClient = useQueryClient()
+  return () => {
+    queryClient.invalidateQueries({ queryKey: ['prospects'] })
+    queryClient.invalidateQueries({ queryKey: ['prospect-counts'] })
+    queryClient.invalidateQueries({ queryKey: ['feed'] })
+    queryClient.invalidateQueries({ queryKey: ['category-search'] })
+  }
+}
+
 export function useUpdateProspectStatus() {
   const invalidate = useInvalidateProspects()
   return useMutation({
@@ -72,6 +85,14 @@ export function useDeleteProspect() {
   const invalidate = useInvalidateProspects()
   return useMutation({
     mutationFn: (id: string) => deleteProspect(id),
+    onSuccess: invalidate,
+  })
+}
+
+export function useRestoreProspect() {
+  const invalidate = useInvalidateAfterRestore()
+  return useMutation({
+    mutationFn: (id: string) => restoreProspect(id),
     onSuccess: invalidate,
   })
 }

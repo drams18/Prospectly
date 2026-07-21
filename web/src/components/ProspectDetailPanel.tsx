@@ -8,9 +8,14 @@ interface ProspectDetailPanelProps {
   prospect: Prospect
   onClose: () => void
   onDelete: () => void
+  onRestore?: () => void
 }
 
-export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDetailPanelProps) {
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+export function ProspectDetailPanel({ prospect, onClose, onDelete, onRestore }: ProspectDetailPanelProps) {
   // Tracked locally and updated optimistically on each action: the panel can
   // stay open across a mutation (e.g. right after Explorer's "Sauvegarder"),
   // and its `prospect` prop is a point-in-time snapshot that never refreshes
@@ -18,6 +23,7 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
   const [status, setStatus] = useState(prospect.status)
   const [isFavorite, setIsFavorite] = useState(prospect.is_favorite)
   const [notes, setNotes] = useState(prospect.notes ?? '')
+  const [hoursOpen, setHoursOpen] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateStatus = useUpdateProspectStatus()
@@ -89,7 +95,34 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
           <Field label="Réservation en ligne" value={prospect.has_booking ? 'Oui' : 'Non'} />
           {prospect.rating != null && <Field label="Note Google" value={`★ ${prospect.rating} (${prospect.reviews ?? 0} avis)`} />}
           {prospect.score != null && <Field label="Score" value={`${prospect.score}/100`} />}
+          <Field label="Première consultation" value={formatDateTime(prospect.first_seen_at)} />
+          <Field label="Dernière consultation" value={formatDateTime(prospect.last_seen_at)} />
         </div>
+
+        {!!prospect.photos?.length && (
+          <div className="mt-4 flex gap-2 overflow-x-auto">
+            {prospect.photos.map((url) => (
+              <img key={url} src={url} alt={prospect.name} className="h-20 w-20 flex-none rounded-app object-cover" />
+            ))}
+          </div>
+        )}
+
+        {!!prospect.opening_hours?.weekdayText?.length && (
+          <div className="mt-3">
+            <button
+              type="button"
+              className="text-xs font-medium text-primary"
+              onClick={() => setHoursOpen((v) => !v)}
+            >
+              {hoursOpen ? 'Masquer les horaires' : 'Voir les horaires'}
+            </button>
+            {hoursOpen && (
+              <ul className="mt-1.5 space-y-0.5 text-xs text-text-secondary">
+                {prospect.opening_hours.weekdayText.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
 
         <div className="mt-4">
           <label className="mb-1 block text-xs font-medium uppercase text-text-muted">Changer le statut</label>
@@ -126,7 +159,15 @@ export function ProspectDetailPanel({ prospect, onClose, onDelete }: ProspectDet
           />
         </div>
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          {onRestore && prospect.is_seen && (
+            <button onClick={onRestore} className="rounded-app border border-border-strong px-3 py-2 text-sm font-medium text-text-secondary hover:bg-bg">
+              Remettre dans le feed
+            </button>
+          )}
+          {onRestore && !prospect.is_seen && (
+            <span className="rounded-app px-3 py-2 text-sm text-text-muted">Déjà dans le feed</span>
+          )}
           <button onClick={onDelete} className="rounded-app px-3 py-2 text-sm font-medium text-danger-text hover:bg-danger-bg">
             Supprimer ce prospect
           </button>

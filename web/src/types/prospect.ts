@@ -1,12 +1,20 @@
-export type ProspectStatus = 'to_contact' | 'contacted' | 'client'
+export type ProspectStatus =
+  | 'to_contact' | 'contacted' | 'waiting' | 'follow_up' | 'client' | 'refused' | 'ignored'
 
-export const PROSPECT_STATUSES: ProspectStatus[] = ['to_contact', 'contacted', 'client']
+export const PROSPECT_STATUSES: ProspectStatus[] =
+  ['to_contact', 'contacted', 'waiting', 'follow_up', 'client', 'refused', 'ignored']
 
 export const STATUS_LABELS: Record<ProspectStatus, string> = {
   to_contact: 'À contacter',
   contacted: 'Contacté',
+  waiting: 'En attente',
+  follow_up: 'Relance à prévoir',
   client: 'Client',
+  refused: 'Refus',
+  ignored: 'Ignoré',
 }
+
+export type ProspectPriority = 'low' | 'medium' | 'high'
 
 export interface Prospect {
   id: string
@@ -34,6 +42,14 @@ export interface Prospect {
   wasted_potential: boolean | null
   is_favorite: boolean
   notes: string | null
+  is_seen: boolean
+  first_seen_at: string
+  last_seen_at: string
+  photos: string[] | null
+  opening_hours: OpeningHours | null
+  reminder_at: string | null
+  priority: ProspectPriority | null
+  tags: string[]
   created_at: string
   updated_at: string
 }

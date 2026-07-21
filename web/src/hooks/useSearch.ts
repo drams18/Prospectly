@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/AuthProvider'
 import { searchCategory } from '@/services/search'
-import { fetchKnownStatuses, saveLead } from '@/services/prospects'
+import { fetchKnownStatuses, markProspectSeen, saveLead } from '@/services/prospects'
 import type { SearchLead } from '@/types/prospect'
 import type { SubmittedSearch } from '@/store/searchStore'
 
@@ -45,5 +45,15 @@ export function useSaveLead() {
       queryClient.invalidateQueries({ queryKey: ['prospects'] })
       queryClient.invalidateQueries({ queryKey: ['prospect-counts'] })
     },
+  })
+}
+
+// Point 7: fired as soon as a lead becomes the current feed card, so it's
+// persisted as seen even if the user never taps "Sauvegarder" — it must
+// never come back on reload or in a later session.
+export function useMarkSeen() {
+  const { user } = useAuth()
+  return useMutation({
+    mutationFn: (lead: SearchLead) => markProspectSeen(user!.id, lead),
   })
 }

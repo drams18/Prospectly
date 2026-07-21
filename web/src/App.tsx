@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { NavBar } from '@/components/NavBar'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { useAuth } from '@/lib/AuthProvider'
+import HistoriquePage from '@/pages/HistoriquePage'
 import LoginPage from '@/pages/LoginPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ProspectsPage from '@/pages/ProspectsPage'
@@ -29,6 +30,7 @@ export default function App() {
 
       <Route path="/" element={<ProtectedRoute><AppShell><SearchPage /></AppShell></ProtectedRoute>} />
       <Route path="/prospects" element={<ProtectedRoute><AppShell><ProspectsPage /></AppShell></ProtectedRoute>} />
+      <Route path="/historique" element={<ProtectedRoute><AppShell><HistoriquePage /></AppShell></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><AppShell><ProfilePage /></AppShell></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -14,6 +14,7 @@ export function NavBar() {
 
         <NavLink to="/" className={linkClass} end>Explorer</NavLink>
         <NavLink to="/prospects" className={linkClass}>Mes Prospects</NavLink>
+        <NavLink to="/historique" className={linkClass}>Historique</NavLink>
         <NavLink to="/profile" className={linkClass}>Profil</NavLink>
 
         <div className="ml-auto flex items-center gap-3">
