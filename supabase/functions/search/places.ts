@@ -164,6 +164,7 @@ async function nearbySearch({ lat, lng, radius, keyword, placeType, apiKey }: Ne
 }
 
 export interface FeedCategory {
+  id: string;
   type: string | null;
   keywords: string[];
 }
@@ -176,6 +177,17 @@ export interface SearchFeedBandParams {
   categories?: FeedCategory[];
 }
 
+export interface SearchFeedBandResult {
+  places: GooglePlace[];
+  // place_id -> ids of the requested categories whose Nearby Search call
+  // returned it. Only populated when `categories` was provided — lets the
+  // caller re-validate matches (see index.ts) since Google's Nearby Search
+  // `type=` param matches ANY type in a place's `types` array, not just its
+  // primary business type (a supermarket with a floral corner is a real
+  // `florist` match for Google, not just for `type=supermarket`).
+  categoryMatches: Map<string, Set<string>>;
+}
+
 // Fans a feed band out across broad business-type buckets instead of a bare
 // keyword-less search: Google's Nearby Search ranks by prominence and caps
 // at ~60 results per call regardless of radius, so an unscoped call would
@@ -186,29 +198,41 @@ export interface SearchFeedBandParams {
 // per category, `type=` when the category has an exact/broad Google Place
 // Type, `keyword=` otherwise (still Google's own matching — never an
 // app-side name.includes()).
-export async function searchFeedBand({ lat, lng, radius, apiKey, categories }: SearchFeedBandParams): Promise<GooglePlace[]> {
+export async function searchFeedBand({ lat, lng, radius, apiKey, categories }: SearchFeedBandParams): Promise<SearchFeedBandResult> {
+  const categoryMatches = new Map<string, Set<string>>();
+
   const tasks = categories?.length
     ? categories.map(cat => async () => {
         try {
-          return await nearbySearch({
+          const places = await nearbySearch({
             lat, lng, radius, apiKey,
             placeType: cat.type,
             keyword: cat.type ? null : (cat.keywords[0] ?? null),
           });
-        } catch { return [] as GooglePlace[]; }
+          return places.map(place => ({ place, categoryId: cat.id }));
+        } catch { return [] as Array<{ place: GooglePlace; categoryId: string }>; }
       })
     : FEED_TYPE_BUCKETS.map(placeType => async () => {
-        try { return await nearbySearch({ lat, lng, radius, placeType, apiKey }); }
-        catch { return [] as GooglePlace[]; }
+        try {
+          const places = await nearbySearch({ lat, lng, radius, placeType, apiKey });
+          return places.map(place => ({ place, categoryId: null as string | null }));
+        } catch { return [] as Array<{ place: GooglePlace; categoryId: string | null }>; }
       });
   const batches = await promisePool(tasks, 4);
 
   const seen = new Map<string, GooglePlace>();
   for (const batch of batches) {
-    for (const place of batch) seen.set(place.place_id, place);
+    for (const { place, categoryId } of batch) {
+      seen.set(place.place_id, place);
+      if (categoryId) {
+        const ids = categoryMatches.get(place.place_id) ?? new Set<string>();
+        ids.add(categoryId);
+        categoryMatches.set(place.place_id, ids);
+      }
+    }
   }
 
-  return filterOutChains([...seen.values()]);
+  return { places: filterOutChains([...seen.values()]), categoryMatches };
 }
 
 export interface SearchPlacesParams {

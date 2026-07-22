@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
       const radius = RADIUS_LADDER[band];
       const prevRadius = band > 0 ? RADIUS_LADDER[band - 1] : 0;
 
-      const rawPlaces = await searchFeedBand({ lat, lng, radius, apiKey, categories: selectedCategories });
+      const { places: rawPlaces, categoryMatches } = await searchFeedBand({ lat, lng, radius, apiKey, categories: selectedCategories });
 
       // Ring-diff: only keep businesses newly covered by this band's larger
       // radius, so growing bands don't re-process the same inner disc.
@@ -214,10 +214,30 @@ Deno.serve(async (req) => {
         return haversineDistance(lat, lng, plat, plng) > prevRadius;
       });
 
+      // Google's Nearby Search `type=` param matches ANY type in a place's
+      // `types` array, not just its primary business type — e.g. a
+      // supermarket with a floral corner genuinely carries `florist` as a
+      // secondary type and comes back from `type=florist`. Re-validate that
+      // the requested category's type is the place's PRIMARY type (types[0])
+      // before trusting the match; categories with no Google type (keyword-
+      // only) can't be re-checked this way, so they're trusted as-is.
+      const categoryTypeById = new Map(selectedCategories.map(c => [c.id, c.type]));
+      const matchesRequestedCategory = (place: GooglePlace) => {
+        if (!selectedCategories.length) return true;
+        const matchedIds = categoryMatches.get(place.place_id);
+        if (!matchedIds?.size) return true;
+        for (const id of matchedIds) {
+          const type = categoryTypeById.get(id);
+          if (!type || place.types?.[0] === type) return true;
+        }
+        return false;
+      };
+
       // Cap Details-call volume: sort by prominence signals already present
       // on the raw Nearby Search response, no Details call needed for this.
       const candidates = ring
         .filter(place => !isNoiseType(place.types))
+        .filter(matchesRequestedCategory)
         .sort((a, b) => (b.user_ratings_total ?? 0) - (a.user_ratings_total ?? 0))
         .slice(0, 40);
 
