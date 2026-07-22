@@ -13,13 +13,20 @@ interface Coords {
   lng: number
 }
 
+// Exported so a resumed prospecting session can seed this exact cache entry
+// (queryClient.setQueryData) instead of re-fetching — the key must match
+// byte-for-byte or the seeded data would just sit next to a fresh fetch.
+export function buildFeedQueryKey(userId: string, coords: Coords | null, categoryIds: string[]) {
+  const catKey = categoryIds.length ? [...categoryIds].sort().join(',') : 'all'
+  return ['feed', coords?.lat.toFixed(4), coords?.lng.toFixed(4), userId, catKey] as const
+}
+
 export function useFeed(coords: Coords | null, categoryIds: string[] = []) {
   const { user } = useAuth()
   const userId = user?.id ?? ''
-  const catKey = categoryIds.length ? [...categoryIds].sort().join(',') : 'all'
 
   const query = useInfiniteQuery({
-    queryKey: ['feed', coords?.lat.toFixed(4), coords?.lng.toFixed(4), userId, catKey],
+    queryKey: buildFeedQueryKey(userId, coords, categoryIds),
     queryFn: async ({ pageParam }) => {
       const { lat, lng } = coords as Coords
       const { results, meta } = await fetchFeedBand({ lat, lng, bandIndex: pageParam, categoryIds })

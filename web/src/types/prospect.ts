@@ -41,16 +41,61 @@ export interface Prospect {
   is_hot: boolean | null
   wasted_potential: boolean | null
   is_favorite: boolean
-  notes: string | null
   is_seen: boolean
   is_validated: boolean
   first_seen_at: string
   last_seen_at: string
   photos: string[] | null
   opening_hours: OpeningHours | null
-  reminder_at: string | null
   priority: ProspectPriority | null
   tags: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ProspectNote {
+  id: string
+  prospect_id: string
+  user_id: string
+  content: string
+  created_at: string
+}
+
+export type ReminderType = 'call' | 'email' | 'sms' | 'whatsapp' | 'task'
+export type ReminderStatus = 'pending' | 'done'
+
+export interface Reminder {
+  id: string
+  prospect_id: string
+  user_id: string
+  remind_at: string
+  title: string
+  comment: string | null
+  type: ReminderType
+  status: ReminderStatus
+  notified_at: string | null
+  completed_at: string | null
+  external_calendar_provider: string | null
+  external_calendar_event_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Reminder joined with the fields the dashboard/calendar views need to
+// display without a second round-trip per row.
+export interface ReminderWithProspect extends Reminder {
+  prospect_name: string
+}
+
+export interface ProspectingSession {
+  id: string
+  user_id: string
+  status: 'active' | 'completed'
+  coords: { lat: number; lng: number } | null
+  category_ids: string[]
+  leads: SearchLead[]
+  current_index: number
+  next_band_index: number
   created_at: string
   updated_at: string
 }

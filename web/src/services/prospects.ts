@@ -73,14 +73,33 @@ export async function updateProspectStatus(id: string, status: ProspectStatus): 
   if (error) throw error
 }
 
-export async function updateProspectNotes(id: string, notes: string): Promise<void> {
-  const { error } = await supabase.from('prospects').update({ notes }).eq('id', id)
-  if (error) throw error
-}
-
 export async function toggleFavorite(id: string, isFavorite: boolean): Promise<void> {
   const { error } = await supabase.from('prospects').update({ is_favorite: isFavorite }).eq('id', id)
   if (error) throw error
+}
+
+export async function updateProspectPriority(id: string, priority: Prospect['priority']): Promise<void> {
+  const { error } = await supabase.from('prospects').update({ priority }).eq('id', id)
+  if (error) throw error
+}
+
+export async function updateProspectEmail(id: string, email: string): Promise<void> {
+  const { error } = await supabase.from('prospects').update({ email: email || null }).eq('id', id)
+  if (error) throw error
+}
+
+export async function updateProspectWebsite(id: string, website: string): Promise<void> {
+  const { error } = await supabase.from('prospects').update({ website: website || null }).eq('id', id)
+  if (error) throw error
+}
+
+// Deep-link target for the redirect straight into a prospect's fiche after
+// validation — independent of ProspectsPage's current filter/pagination, so
+// it works even before the freshly-saved row would appear in that list.
+export async function getProspectById(id: string): Promise<Prospect> {
+  const { data, error } = await supabase.from('prospects').select('*').eq('id', id).single()
+  if (error) throw error
+  return data
 }
 
 export async function deleteProspect(id: string): Promise<void> {

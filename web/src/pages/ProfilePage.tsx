@@ -3,8 +3,57 @@ import { useNavigate } from 'react-router-dom'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useAuth } from '@/lib/AuthProvider'
 import { useQuery } from '@tanstack/react-query'
+import { getPermissionState, isIos, isPushSupported, isStandalone, subscribeToPush, type PermissionState } from '@/lib/push'
 import { deleteAccount, getProfile, updatePassword, updateStartAddress } from '@/services/profile'
 import { clearSearchHistory } from '@/services/searchHistory'
+
+const PERMISSION_LABELS: Record<PermissionState, string> = {
+  unsupported: 'Non supporté par ce navigateur',
+  default: 'Pas encore activées',
+  granted: 'Activées',
+  denied: 'Refusées',
+}
+
+function NotificationSettings() {
+  const { user } = useAuth()
+  const [permission, setPermission] = useState<PermissionState>(getPermissionState())
+
+  async function enable() {
+    if (!user) return
+    await subscribeToPush(user.id)
+    setPermission(getPermissionState())
+  }
+
+  return (
+    <div className="mt-4 rounded-app-lg border border-border bg-surface p-5">
+      <h2 className="text-sm font-semibold text-text">Notifications de rappel</h2>
+      <p className="mt-1 text-xs text-text-muted">État : {PERMISSION_LABELS[permission]}</p>
+
+      {permission === 'granted' && (
+        <p className="mt-3 text-sm text-success-text">🔔 Vous recevrez une notification à l'heure de chaque rappel.</p>
+      )}
+
+      {permission === 'default' && isPushSupported() && (
+        <button onClick={enable} className="mt-3 rounded-app bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark">
+          Activer les notifications
+        </button>
+      )}
+
+      {permission === 'denied' && (
+        <p className="mt-3 text-sm text-text-secondary">
+          Vous avez refusé les notifications. Impossible de les réactiver depuis l'app — passez par les réglages de votre appareil
+          (iPhone : Réglages → Prospectly → Notifications → Autoriser).
+        </p>
+      )}
+
+      {isIos() && !isStandalone() && (
+        <p className="mt-3 text-sm text-warning-text">
+          📲 Sur iPhone, les notifications ne fonctionnent que si Prospectly est installé sur l'écran d'accueil (Partager → "Sur l'écran d'accueil").
+        </p>
+      )}
+    </div>
+  )
+}
 
 export default function ProfilePage() {
   const { user, signOut } = useAuth()
@@ -104,6 +153,8 @@ export default function ProfilePage() {
           Mettre à jour
         </button>
       </form>
+
+      <NotificationSettings />
 
       <div className="mt-4 rounded-app-lg border border-danger-bg bg-surface p-5">
         <h2 className="text-sm font-semibold text-danger-text">Zone de danger</h2>

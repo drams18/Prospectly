@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ProspectDetailPanel } from '@/components/ProspectDetailPanel'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { useHotkeys } from '@/hooks/useHotkeys'
-import { useDeleteProspect, useProspectCounts, useProspects } from '@/hooks/useProspects'
+import { useDeleteProspect, useProspect, useProspectCounts, useProspects } from '@/hooks/useProspects'
 import { PROSPECT_STATUSES, STATUS_LABELS, type Prospect, type ProspectStatus } from '@/types/prospect'
 
 const TAB_STATUSES: Array<ProspectStatus | 'all'> = ['all', ...PROSPECT_STATUSES]
 const TAB_LABELS: Record<ProspectStatus | 'all', string> = { all: 'Tous', ...STATUS_LABELS }
 
 export default function ProspectsPage() {
+  const navigate = useNavigate()
+  const { id: routeId } = useParams<{ id: string }>()
   const [statusFilter, setStatusFilter] = useState<ProspectStatus | 'all'>('all')
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [search, setSearch] = useState('')
@@ -25,6 +28,22 @@ export default function ProspectsPage() {
 
   const rows = useMemo(() => data?.pages.flatMap(p => p.rows) ?? [], [data])
 
+  // Point 1 + 2: a redirect straight from Explorer ("/prospects/:id") must
+  // open the fiche immediately, even before the freshly-validated row shows
+  // up in this page's own filtered/paginated list.
+  const { data: routeProspect } = useProspect(routeId)
+  useEffect(() => {
+    if (!routeId) return
+    const inList = rows.find(r => r.id === routeId)
+    if (inList) setSelected(inList)
+    else if (routeProspect) setSelected(routeProspect)
+  }, [routeId, rows, routeProspect])
+
+  function closePanel() {
+    setSelected(null)
+    if (routeId) navigate('/prospects')
+  }
+
   const sentinelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = sentinelRef.current
@@ -37,13 +56,13 @@ export default function ProspectsPage() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   useHotkeys({
-    Escape: () => { setSelected(null); setPendingDeleteId(null) },
-  }, [])
+    Escape: () => { closePanel(); setPendingDeleteId(null) },
+  }, [routeId])
 
   function confirmDelete() {
     if (!pendingDeleteId) return
     deleteProspect.mutate(pendingDeleteId)
-    if (selected?.id === pendingDeleteId) setSelected(null)
+    if (selected?.id === pendingDeleteId) closePanel()
     setPendingDeleteId(null)
   }
 
@@ -107,7 +126,7 @@ export default function ProspectsPage() {
       {selected && (
         <ProspectDetailPanel
           prospect={rows.find(r => r.id === selected.id) ?? selected}
-          onClose={() => setSelected(null)}
+          onClose={closePanel}
           onDelete={() => setPendingDeleteId(selected.id)}
         />
       )}

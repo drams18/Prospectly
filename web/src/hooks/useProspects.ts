@@ -1,10 +1,11 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/AuthProvider'
 import {
-  deleteProspect, getProspectCounts, listProspects, restoreProspect,
-  toggleFavorite, updateProspectNotes, updateProspectStatus,
+  deleteProspect, getProspectById, getProspectCounts, listProspects, restoreProspect,
+  toggleFavorite, updateProspectEmail, updateProspectPriority, updateProspectStatus,
+  updateProspectWebsite,
 } from '@/services/prospects'
-import type { ProspectStatus } from '@/types/prospect'
+import type { Prospect, ProspectStatus } from '@/types/prospect'
 
 export interface ProspectsFilter {
   status: ProspectStatus | 'all'
@@ -67,11 +68,38 @@ export function useUpdateProspectStatus() {
   })
 }
 
-export function useUpdateProspectNotes() {
+export function useUpdateProspectPriority() {
   const invalidate = useInvalidateProspects()
   return useMutation({
-    mutationFn: ({ id, notes }: { id: string; notes: string }) => updateProspectNotes(id, notes),
+    mutationFn: ({ id, priority }: { id: string; priority: Prospect['priority'] }) => updateProspectPriority(id, priority),
     onSuccess: invalidate,
+  })
+}
+
+export function useUpdateProspectEmail() {
+  const invalidate = useInvalidateProspects()
+  return useMutation({
+    mutationFn: ({ id, email }: { id: string; email: string }) => updateProspectEmail(id, email),
+    onSuccess: invalidate,
+  })
+}
+
+export function useUpdateProspectWebsite() {
+  const invalidate = useInvalidateProspects()
+  return useMutation({
+    mutationFn: ({ id, website }: { id: string; website: string }) => updateProspectWebsite(id, website),
+    onSuccess: invalidate,
+  })
+}
+
+// Direct fetch by id, independent of any list's current filter/pagination —
+// used to open a prospect's fiche straight from a deep link (e.g. the
+// redirect right after validating it from Explorer).
+export function useProspect(id: string | undefined) {
+  return useQuery({
+    queryKey: ['prospect', id],
+    queryFn: () => getProspectById(id as string),
+    enabled: !!id,
   })
 }
 

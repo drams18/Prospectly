@@ -1,8 +1,15 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useGeolocation } from '@/hooks/useGeolocation'
+import { useNavigate } from 'react-router-dom'
 import { useCategoryFilterPreference } from '@/hooks/useCategoryFilterPreference'
-import { useFeed } from '@/hooks/useFeed'
+import { buildFeedQueryKey, useFeed } from '@/hooks/useFeed'
+import { useGeolocation } from '@/hooks/useGeolocation'
+import {
+  useActiveProspectingSession, useCompleteProspectingSession,
+  useCreateProspectingSession, useUpdateProspectingSession,
+} from '@/hooks/useProspectingSession'
 import { useMarkSeen, useSaveLead } from '@/hooks/useSearch'
+import { useAuth } from '@/lib/AuthProvider'
 import { useFeedStore } from '@/store/feedStore'
 import type { SearchLead } from '@/types/prospect'
 import { CategoryFilterButton } from './CategoryFilterButton'
@@ -11,10 +18,18 @@ import { FeedEndCard } from './FeedEndCard'
 import { FeedStack } from './FeedStack'
 import { GeolocationGate } from './GeolocationGate'
 
+const PROGRESS_SAVE_DEBOUNCE_MS = 1000
+
 export function SwipeFeed() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const userId = user?.id ?? ''
+  const queryClient = useQueryClient()
+
   const { status, retry } = useGeolocation()
   const coords = useFeedStore((s) => s.coords)
   const currentIndex = useFeedStore((s) => s.currentIndex)
+  const setIndex = useFeedStore((s) => s.setIndex)
   const savedIds = useFeedStore((s) => s.savedIds)
   const markSaved = useFeedStore((s) => s.markSaved)
   const selectedCategoryIds = useFeedStore((s) => s.selectedCategoryIds)
@@ -23,9 +38,37 @@ export function SwipeFeed() {
   const markSeen = useMarkSeen()
   const [filterOpen, setFilterOpen] = useState(false)
 
-  useCategoryFilterPreference()
+  // Point 16: an active session (exact leads/index/filters) takes priority
+  // over both fresh geolocation-driven fetching and the profile's last-used
+  // category filter — see useCategoryFilterPreference's defer/skip params.
+  const { data: session, isLoading: sessionLoading } = useActiveProspectingSession()
+  const createSession = useCreateProspectingSession()
+  const updateSession = useUpdateProspectingSession()
+  const completeSession = useCompleteProspectingSession()
+  const sessionIdRef = useRef<string | null>(null)
+  const hydratedRef = useRef(false)
+  const sessionEndedRef = useRef(false)
 
-  const { leads, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = useFeed(coords, selectedCategoryIds)
+  useCategoryFilterPreference(sessionLoading, !!session)
+
+  useEffect(() => {
+    if (sessionLoading || hydratedRef.current) return
+    hydratedRef.current = true
+    if (!session) return
+    sessionIdRef.current = session.id
+    if (session.coords) useFeedStore.getState().setCoords(session.coords)
+    setSelectedCategoryIds(session.category_ids)
+    setIndex(session.current_index)
+    if (session.coords) {
+      queryClient.setQueryData(buildFeedQueryKey(userId, session.coords, session.category_ids), {
+        pages: [{ results: session.leads, meta: { bandIndex: Math.max(session.next_band_index - 1, 0), exhausted: false } }],
+        pageParams: [0],
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, sessionLoading])
+
+  const { leads, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage, refetch, data } = useFeed(coords, selectedCategoryIds)
 
   // Point 7: the card currently on screen is considered "vu" and must never
   // reappear — persisted right away, not only when the user swipes past it.
@@ -37,19 +80,79 @@ export function SwipeFeed() {
     markSeen.mutate(lead)
   }, [currentIndex, leads, markSeen])
 
+  // Creates the session row lazily, the first time this device has fetched
+  // a real page of leads without finding an existing active one to resume.
+  useEffect(() => {
+    if (sessionLoading || sessionIdRef.current || !coords || leads.length === 0) return
+    const nextBandIndex = (data?.pages.at(-1)?.meta.bandIndex ?? -1) + 1
+    createSession.mutate(
+      { coords, categoryIds: selectedCategoryIds, leads, nextBandIndex },
+      { onSuccess: (created) => { sessionIdRef.current = created.id } },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionLoading, coords, leads.length])
+
+  // Debounced progress persistence: index moves on every swipe, and leads
+  // grow every time a new band is fetched — both get folded back into the
+  // session row so a reload resumes with byte-identical state.
+  useEffect(() => {
+    if (!sessionIdRef.current) return
+    const timer = setTimeout(() => {
+      const nextBandIndex = (data?.pages.at(-1)?.meta.bandIndex ?? -1) + 1
+      updateSession.mutate({
+        id: sessionIdRef.current as string,
+        input: { leads, currentIndex, nextBandIndex, categoryIds: selectedCategoryIds },
+      })
+    }, PROGRESS_SAVE_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, leads.length, selectedCategoryIds])
+
+  const empty = !isLoading && leads.length === 0 && !hasNextPage && !isFetchingNextPage
+  const reachedEnd = !empty && !isLoading && !hasNextPage && !isFetchingNextPage && currentIndex >= leads.length - 1
+
+  // Once the feed is genuinely exhausted, the session is done — reopening
+  // Explorer later should start a fresh one rather than resume an empty list.
+  useEffect(() => {
+    if (!reachedEnd || sessionEndedRef.current || !sessionIdRef.current) return
+    sessionEndedRef.current = true
+    completeSession.mutate(sessionIdRef.current)
+    sessionIdRef.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reachedEnd])
+
   if (status !== 'granted' || !coords) {
     return <GeolocationGate status={status} onRetry={retry} />
   }
 
   function onSave(lead: SearchLead) {
-    saveLead.mutate(lead, { onSuccess: () => markSaved(lead.placeId) })
+    // Point 1: validating a prospect is meant to hand off straight into its
+    // fiche so the user can keep working on it, not stay stuck in the feed.
+    saveLead.mutate(lead, {
+      onSuccess: (prospect) => {
+        markSaved(lead.placeId)
+        navigate(`/prospects/${prospect.id}`)
+      },
+    })
   }
 
-  const empty = !isLoading && leads.length === 0 && !hasNextPage && !isFetchingNextPage
-  const reachedEnd = !empty && !isLoading && !hasNextPage && !isFetchingNextPage && currentIndex >= leads.length - 1
+  // Point 16: "Nouvelle session de prospection" — the only way the feed
+  // ever resets on purpose. Everything else (reload, logout, tab close)
+  // must resume exactly where the user left off.
+  function onNewSession() {
+    const id = sessionIdRef.current
+    sessionIdRef.current = null
+    hydratedRef.current = true
+    sessionEndedRef.current = false
+    setIndex(0)
+    seenPlaceIdsRef.current.clear()
+    queryClient.removeQueries({ queryKey: ['feed'] })
+    if (id) completeSession.mutate(id)
+    refetch()
+  }
 
   let content: ReactNode
-  if (isLoading && leads.length === 0) {
+  if ((isLoading && leads.length === 0) || sessionLoading) {
     content = (
       <div className="flex h-full w-full items-center justify-center">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-border-strong border-t-primary" />
@@ -69,7 +172,7 @@ export function SwipeFeed() {
       </div>
     )
   } else if (empty || reachedEnd) {
-    content = <FeedEndCard empty={empty} onRefresh={() => refetch()} />
+    content = <FeedEndCard empty={empty} onRefresh={onNewSession} />
   } else {
     content = (
       <FeedStack
@@ -86,6 +189,13 @@ export function SwipeFeed() {
   return (
     <>
       <CategoryFilterButton activeCount={selectedCategoryIds.length} onClick={() => setFilterOpen(true)} />
+      <button
+        type="button"
+        onClick={onNewSession}
+        className="fixed right-4 top-4 z-30 rounded-full bg-white/90 px-3 py-2 text-xs font-medium text-text shadow-sm backdrop-blur-sm hover:bg-white"
+      >
+        Nouvelle session
+      </button>
       <CategoryFilterSheet
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
