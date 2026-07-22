@@ -11,6 +11,9 @@ interface FeedState {
   isTransitioning: boolean
   savedIds: Set<string>
   selectedCategoryIds: string[]
+  sessionId: string | null
+  sessionHydrated: boolean
+  sessionEnded: boolean
   setCoords: (coords: Coords) => void
   goNext: (count: number) => void
   goPrevious: () => void
@@ -18,6 +21,9 @@ interface FeedState {
   setTransitioning: (value: boolean) => void
   markSaved: (placeId: string) => void
   setSelectedCategoryIds: (categoryIds: string[]) => void
+  setSessionId: (id: string | null) => void
+  setSessionHydrated: (value: boolean) => void
+  setSessionEnded: (value: boolean) => void
 }
 
 /**
@@ -27,6 +33,12 @@ interface FeedState {
  * `isTransitioning` is a single shared lock: drag, wheel, and keyboard
  * navigation all check/set it so an animation in flight can't be
  * double-triggered into skipping a card.
+ * `sessionId`/`sessionHydrated`/`sessionEnded` used to be local refs in
+ * SwipeFeed — since the component unmounts on every route change, those refs
+ * reset on each return to Explorer, re-running the session-hydration effect
+ * with a stale snapshot and clobbering the (correctly preserved) index and
+ * feed cache. Living here instead means they only reset on a real page
+ * reload or an explicit "Nouvelle session".
  */
 export const useFeedStore = create<FeedState>((set) => ({
   coords: null,
@@ -34,6 +46,9 @@ export const useFeedStore = create<FeedState>((set) => ({
   isTransitioning: false,
   savedIds: new Set(),
   selectedCategoryIds: [],
+  sessionId: null,
+  sessionHydrated: false,
+  sessionEnded: false,
   setCoords: (coords) => set({ coords }),
   goNext: (count) => set((s) => ({ currentIndex: Math.min(s.currentIndex + 1, Math.max(count - 1, 0)) })),
   goPrevious: () => set((s) => ({ currentIndex: Math.max(s.currentIndex - 1, 0) })),
@@ -45,4 +60,7 @@ export const useFeedStore = create<FeedState>((set) => ({
   // A new category selection means a whole new leads list — the previous
   // scroll position/card index no longer means anything.
   setSelectedCategoryIds: (categoryIds) => set({ selectedCategoryIds: categoryIds, currentIndex: 0 }),
+  setSessionId: (sessionId) => set({ sessionId }),
+  setSessionHydrated: (sessionHydrated) => set({ sessionHydrated }),
+  setSessionEnded: (sessionEnded) => set({ sessionEnded }),
 }))

@@ -4,6 +4,7 @@ import {
   completeSession, createSession, getActiveSession, updateSessionProgress,
   type CreateSessionInput, type UpdateSessionInput,
 } from '@/services/prospectingSession'
+import type { ProspectingSession } from '@/types/prospect'
 
 // Point 16: the active session (if any) is the single source of truth for
 // resuming Explorer exactly where the user left off — fetched once per
@@ -34,8 +35,28 @@ export function useCreateProspectingSession() {
 }
 
 export function useUpdateProspectingSession() {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateSessionInput }) => updateSessionProgress(id, input),
+    // Without this, the cached session (read once with staleTime: Infinity)
+    // never reflects the debounced progress saves below — a later remount
+    // would re-hydrate the feed from an out-of-date snapshot.
+    onSuccess: (_result, { input }) => {
+      queryClient.setQueryData(
+        ['prospecting-session', user?.id],
+        (prev: ProspectingSession | null | undefined) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            ...(input.leads !== undefined && { leads: input.leads }),
+            ...(input.currentIndex !== undefined && { current_index: input.currentIndex }),
+            ...(input.nextBandIndex !== undefined && { next_band_index: input.nextBandIndex }),
+            ...(input.categoryIds !== undefined && { category_ids: input.categoryIds }),
+          }
+        },
+      )
+    },
   })
 }
 

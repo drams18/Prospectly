@@ -10,6 +10,7 @@ import {
 } from '@/hooks/useProspectingSession'
 import { useMarkSeen, useSaveLead } from '@/hooks/useSearch'
 import { useAuth } from '@/lib/AuthProvider'
+import type { UpdateSessionInput } from '@/services/prospectingSession'
 import { useFeedStore } from '@/store/feedStore'
 import type { SearchLead } from '@/types/prospect'
 import { CategoryFilterButton } from './CategoryFilterButton'
@@ -45,17 +46,19 @@ export function SwipeFeed() {
   const createSession = useCreateProspectingSession()
   const updateSession = useUpdateProspectingSession()
   const completeSession = useCompleteProspectingSession()
-  const sessionIdRef = useRef<string | null>(null)
-  const hydratedRef = useRef(false)
-  const sessionEndedRef = useRef(false)
 
   useCategoryFilterPreference(sessionLoading, !!session)
 
+  // These guards used to be local refs, which reset to their initial value
+  // every time this component remounts (i.e. every time the user leaves and
+  // comes back to Explorer) — re-running hydration and clobbering the
+  // already-correct in-progress index/feed with a stale snapshot. Reading
+  // them from feedStore instead means they only reset on a real page reload.
   useEffect(() => {
-    if (sessionLoading || hydratedRef.current) return
-    hydratedRef.current = true
+    if (sessionLoading || useFeedStore.getState().sessionHydrated) return
+    useFeedStore.getState().setSessionHydrated(true)
     if (!session) return
-    sessionIdRef.current = session.id
+    useFeedStore.getState().setSessionId(session.id)
     if (session.coords) useFeedStore.getState().setCoords(session.coords)
     setSelectedCategoryIds(session.category_ids)
     setIndex(session.current_index)
@@ -83,30 +86,44 @@ export function SwipeFeed() {
   // Creates the session row lazily, the first time this device has fetched
   // a real page of leads without finding an existing active one to resume.
   useEffect(() => {
-    if (sessionLoading || sessionIdRef.current || !coords || leads.length === 0) return
+    if (sessionLoading || useFeedStore.getState().sessionId || !coords || leads.length === 0) return
     const nextBandIndex = (data?.pages.at(-1)?.meta.bandIndex ?? -1) + 1
     createSession.mutate(
       { coords, categoryIds: selectedCategoryIds, leads, nextBandIndex },
-      { onSuccess: (created) => { sessionIdRef.current = created.id } },
+      { onSuccess: (created) => { useFeedStore.getState().setSessionId(created.id) } },
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionLoading, coords, leads.length])
 
   // Debounced progress persistence: index moves on every swipe, and leads
   // grow every time a new band is fetched — both get folded back into the
-  // session row so a reload resumes with byte-identical state.
+  // session row so a reload resumes with byte-identical state. The pending
+  // payload also lives in a ref so the unmount effect below can flush it
+  // immediately if the user navigates away before the debounce fires.
+  const pendingSaveRef = useRef<{ id: string; input: UpdateSessionInput } | null>(null)
   useEffect(() => {
-    if (!sessionIdRef.current) return
+    const sessionId = useFeedStore.getState().sessionId
+    if (!sessionId) return
+    const nextBandIndex = (data?.pages.at(-1)?.meta.bandIndex ?? -1) + 1
+    pendingSaveRef.current = { id: sessionId, input: { leads, currentIndex, nextBandIndex, categoryIds: selectedCategoryIds } }
     const timer = setTimeout(() => {
-      const nextBandIndex = (data?.pages.at(-1)?.meta.bandIndex ?? -1) + 1
-      updateSession.mutate({
-        id: sessionIdRef.current as string,
-        input: { leads, currentIndex, nextBandIndex, categoryIds: selectedCategoryIds },
-      })
+      if (!pendingSaveRef.current) return
+      updateSession.mutate(pendingSaveRef.current)
+      pendingSaveRef.current = null
     }, PROGRESS_SAVE_DEBOUNCE_MS)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, leads.length, selectedCategoryIds])
+
+  // Runs only on true unmount (route navigation away from Explorer) — flushes
+  // a save that was debounced but never got to fire, so a quick swipe right
+  // before leaving isn't lost.
+  useEffect(() => () => {
+    if (!pendingSaveRef.current) return
+    updateSession.mutate(pendingSaveRef.current)
+    pendingSaveRef.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const empty = !isLoading && leads.length === 0 && !hasNextPage && !isFetchingNextPage
   const reachedEnd = !empty && !isLoading && !hasNextPage && !isFetchingNextPage && currentIndex >= leads.length - 1
@@ -114,10 +131,11 @@ export function SwipeFeed() {
   // Once the feed is genuinely exhausted, the session is done — reopening
   // Explorer later should start a fresh one rather than resume an empty list.
   useEffect(() => {
-    if (!reachedEnd || sessionEndedRef.current || !sessionIdRef.current) return
-    sessionEndedRef.current = true
-    completeSession.mutate(sessionIdRef.current)
-    sessionIdRef.current = null
+    const feedState = useFeedStore.getState()
+    if (!reachedEnd || feedState.sessionEnded || !feedState.sessionId) return
+    feedState.setSessionEnded(true)
+    completeSession.mutate(feedState.sessionId)
+    feedState.setSessionId(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reachedEnd])
 
@@ -140,14 +158,13 @@ export function SwipeFeed() {
   // ever resets on purpose. Everything else (reload, logout, tab close)
   // must resume exactly where the user left off.
   function onNewSession() {
-    const id = sessionIdRef.current
-    sessionIdRef.current = null
-    hydratedRef.current = true
-    sessionEndedRef.current = false
+    const { sessionId } = useFeedStore.getState()
+    useFeedStore.setState({ sessionId: null, sessionHydrated: true, sessionEnded: false })
     setIndex(0)
     seenPlaceIdsRef.current.clear()
+    pendingSaveRef.current = null
     queryClient.removeQueries({ queryKey: ['feed'] })
-    if (id) completeSession.mutate(id)
+    if (sessionId) completeSession.mutate(sessionId)
     refetch()
   }
 
